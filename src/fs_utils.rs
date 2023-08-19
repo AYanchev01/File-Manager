@@ -1,18 +1,25 @@
 use std::fs;
 use std::path::Path;
 use tui::widgets::ListState;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
-pub fn get_files_and_dirs(dir: &Path) -> Vec<String> {
+pub fn get_files_and_dirs(dir: &Path) -> Vec<(String, Option<fs::Permissions>)> {
     match fs::read_dir(dir) {
         Ok(entries) => entries
             .filter_map(|entry| entry.ok())
-            .map(|entry| entry.path().file_name().unwrap().to_str().unwrap().to_string())
+            .map(|entry| {
+                let path = entry.path();
+                let name = path.file_name().unwrap().to_str().unwrap().to_string();
+                let perms = entry.metadata().ok().map(|meta| meta.permissions());
+                (name, perms)
+            })
             .collect(),
         Err(_) => Vec::new(),
     }
 }
 
-pub fn get_parent_content(dir: &Path) -> Vec<String> {
+pub fn get_parent_content(dir: &Path) -> Vec<(String, Option<fs::Permissions>)> {
     dir.parent()
         .map_or(Vec::new(), |parent| get_files_and_dirs(parent))
 }
@@ -61,3 +68,29 @@ fn decrement_selection(state: &mut ListState, max_len: usize) {
     state.select(Some(i));
 }
 
+pub fn get_permissions(metadata: &fs::Permissions) -> String {
+    #[cfg(unix)]
+    {
+        let perms_unix = metadata.mode();
+        format!(
+            "{}{}{}{}{}{}{}{}{}",
+            if perms_unix & 0o400 != 0 { "r" } else { "-" },
+            if perms_unix & 0o200 != 0 { "w" } else { "-" },
+            if perms_unix & 0o100 != 0 { "x" } else { "-" },
+            if perms_unix & 0o040 != 0 { "r" } else { "-" },
+            if perms_unix & 0o020 != 0 { "w" } else { "-" },
+            if perms_unix & 0o010 != 0 { "x" } else { "-" },
+            if perms_unix & 0o004 != 0 { "r" } else { "-" },
+            if perms_unix & 0o002 != 0 { "w" } else { "-" },
+            if perms_unix & 0o001 != 0 { "x" } else { "-" }
+        )
+    }
+    #[cfg(windows)]
+    {
+        if metadata.readonly() {
+            "r--r--r--".to_string()
+        } else {
+            "rw-rw-rw-".to_string()
+        }
+    }
+}
