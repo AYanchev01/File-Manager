@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::env;
 
 mod ui;
-use ui::*;
+use ui::{render_pane, PaneType};
 mod fs_utils;
 use fs_utils::*;
 mod input_handler;
@@ -39,7 +39,7 @@ fn main() {
 
         if let Some(selected) = middle_state.selected() {
             if selected < files.len() {
-                let path = current_dir.join(&files[selected]);
+                let path = current_dir.join(&files[selected].0);
                 if path.is_dir() {
                     selected_dir = path; 
                 } else {
@@ -50,11 +50,11 @@ fn main() {
 
         let children = if selected_dir.as_os_str().is_empty() {
             // if selected_dir is empty, it means the selection is a file
-            vec!["contents of file".to_string()]
+            vec![("contents of file".to_string(), None)]
         } else {
             let contents = get_files_and_dirs(&selected_dir);
             if contents.is_empty() {
-                vec!["empty".to_string()]
+                vec![("empty".to_string(), None)]
             } else {
                 contents
             }
@@ -66,17 +66,17 @@ fn main() {
                 .margin(2)
                 .constraints(
                     [
-                        Constraint::Percentage(33),
-                        Constraint::Percentage(34),
-                        Constraint::Percentage(33),
+                        Constraint::Percentage(20),
+                        Constraint::Percentage(40),
+                        Constraint::Percentage(40),
                     ]
                     .as_ref(),
                 )
                 .split(f.size());
 
-            render_pane(f, chunks[0], &parents, &mut left_state);
-            render_pane(f, chunks[1], &files, &mut middle_state);
-            render_pane(f, chunks[2], &children, &mut right_state);
+            render_pane(f, chunks[0], &parents, &mut left_state, PaneType::Left);
+            render_pane(f, chunks[1], &files, &mut middle_state, PaneType::Middle);
+            render_pane(f, chunks[2], &children, &mut right_state, PaneType::Right);
         }).unwrap();
 
         // Handle input

@@ -2,17 +2,23 @@ use std::fs;
 use std::path::Path;
 use tui::widgets::ListState;
 
-pub fn get_files_and_dirs(dir: &Path) -> Vec<String> {
+// Update the function to return (filename, permissions) pairs
+pub fn get_files_and_dirs(dir: &Path) -> Vec<(String, Option<fs::Permissions>)> {
     match fs::read_dir(dir) {
         Ok(entries) => entries
             .filter_map(|entry| entry.ok())
-            .map(|entry| entry.path().file_name().unwrap().to_str().unwrap().to_string())
+            .map(|entry| {
+                let path = entry.path();
+                let name = path.file_name().unwrap().to_str().unwrap().to_string();
+                let perms = entry.metadata().ok().map(|meta| meta.permissions());
+                (name, perms)
+            })
             .collect(),
         Err(_) => Vec::new(),
     }
 }
 
-pub fn get_parent_content(dir: &Path) -> Vec<String> {
+pub fn get_parent_content(dir: &Path) -> Vec<(String, Option<fs::Permissions>)> {
     dir.parent()
         .map_or(Vec::new(), |parent| get_files_and_dirs(parent))
 }
@@ -60,4 +66,3 @@ fn decrement_selection(state: &mut ListState, max_len: usize) {
     };
     state.select(Some(i));
 }
-
