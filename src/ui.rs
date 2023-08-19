@@ -9,7 +9,6 @@ pub enum PaneType {
     Middle,
     Right,
 }
-
 pub fn render_pane(
     f: &mut tui::Frame<tui::backend::CrosstermBackend<std::io::Stdout>>,
     chunk: Rect,
@@ -22,7 +21,7 @@ pub fn render_pane(
             PaneType::Middle => {
                 if let Some(permissions) = permissions {
                     let perms_str = fs_utils::get_permissions(&permissions);
-                    ListItem::new(format!("{:<50} {}", name, perms_str))
+                    ListItem::new(format!("{:<width$} {}", name, perms_str, width = chunk.width as usize - perms_str.len() - 4))
                 } else {
                     ListItem::new(name.to_string())
                 }
