@@ -50,11 +50,11 @@ fn main() {
 
         let children = if selected_dir.as_os_str().is_empty() {
             // if selected_dir is empty, it means the selection is a file
-            vec![("contents of file".to_string(), None)]
+            vec![("contents of file".to_string(), None, false)]
         } else {
             let contents = get_files_and_dirs(&selected_dir);
             if contents.is_empty() {
-                vec![("empty".to_string(), None)]
+                vec![("empty".to_string(), None, false)]
             } else {
                 contents
             }

@@ -8,7 +8,7 @@ pub fn handle_input(
     selected_dir: &mut std::path::PathBuf,
     middle_state: &mut ListState,
     left_state: &mut ListState,
-    files: &[(String, Option<fs::Permissions>)],
+    files: &[(String, Option<fs::Permissions>, bool)],
 ) -> bool {
     match event::read().unwrap() {
         event::Event::Key(KeyEvent { code, .. }) => {

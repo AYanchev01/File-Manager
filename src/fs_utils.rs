@@ -4,22 +4,23 @@ use tui::widgets::ListState;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-pub fn get_files_and_dirs(dir: &Path) -> Vec<(String, Option<fs::Permissions>)> {
+pub fn get_files_and_dirs(dir: &Path) -> Vec<(String, Option<fs::Permissions>, bool)> {
     match fs::read_dir(dir) {
         Ok(entries) => entries
             .filter_map(|entry| entry.ok())
             .map(|entry| {
                 let path = entry.path();
                 let name = path.file_name().unwrap().to_str().unwrap().to_string();
+                let is_dir = path.is_dir();
                 let perms = entry.metadata().ok().map(|meta| meta.permissions());
-                (name, perms)
+                (name, perms, is_dir)
             })
             .collect(),
         Err(_) => Vec::new(),
     }
 }
 
-pub fn get_parent_content(dir: &Path) -> Vec<(String, Option<fs::Permissions>)> {
+pub fn get_parent_content(dir: &Path) -> Vec<(String, Option<fs::Permissions>, bool)> {
     dir.parent()
         .map_or(Vec::new(), |parent| get_files_and_dirs(parent))
 }
