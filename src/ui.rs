@@ -2,6 +2,7 @@ use tui::widgets::{Block, Borders, List, ListItem, ListState};
 use tui::layout::Rect;
 use tui::style::{self, Color};
 use std::fs;
+use super::fs_utils;  // Import the fs_utils module to use the get_permissions function.
 
 pub enum PaneType {
     Left,
@@ -20,12 +21,7 @@ pub fn render_pane(
         match pane_type {
             PaneType::Middle => {
                 if let Some(permissions) = permissions {
-                    let perms_str = format!(
-                        "{}{}{}",
-                        if permissions.readonly() { "r" } else { "-" },
-                        if permissions.readonly() { "w" } else { "-" },
-                        if permissions.readonly() { "x" } else { "-" },
-                    );
+                    let perms_str = fs_utils::get_permissions(&permissions);
                     ListItem::new(format!("{:<50} {}", name, perms_str))
                 } else {
                     ListItem::new(name.to_string())

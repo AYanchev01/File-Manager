@@ -1,8 +1,9 @@
 use std::fs;
 use std::path::Path;
 use tui::widgets::ListState;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
-// Update the function to return (filename, permissions) pairs
 pub fn get_files_and_dirs(dir: &Path) -> Vec<(String, Option<fs::Permissions>)> {
     match fs::read_dir(dir) {
         Ok(entries) => entries
@@ -65,4 +66,31 @@ fn decrement_selection(state: &mut ListState, max_len: usize) {
         None => 0,
     };
     state.select(Some(i));
+}
+
+pub fn get_permissions(metadata: &fs::Permissions) -> String {
+    #[cfg(unix)]
+    {
+        let perms_unix = metadata.mode();
+        format!(
+            "{}{}{}{}{}{}{}{}{}",
+            if perms_unix & 0o400 != 0 { "r" } else { "-" },
+            if perms_unix & 0o200 != 0 { "w" } else { "-" },
+            if perms_unix & 0o100 != 0 { "x" } else { "-" },
+            if perms_unix & 0o040 != 0 { "r" } else { "-" },
+            if perms_unix & 0o020 != 0 { "w" } else { "-" },
+            if perms_unix & 0o010 != 0 { "x" } else { "-" },
+            if perms_unix & 0o004 != 0 { "r" } else { "-" },
+            if perms_unix & 0o002 != 0 { "w" } else { "-" },
+            if perms_unix & 0o001 != 0 { "x" } else { "-" }
+        )
+    }
+    #[cfg(windows)]
+    {
+        if metadata.readonly() {
+            "r--r--r--".to_string()
+        } else {
+            "rw-rw-rw-".to_string()
+        }
+    }
 }
