@@ -4,7 +4,14 @@ use tui::widgets::ListState;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-pub fn get_files_and_dirs(dir: &Path) -> Vec<(String, Option<fs::Permissions>, bool)> {
+pub struct FileInfo {
+    pub name: String,
+    pub perms: Option<fs::Permissions>,
+    pub is_dir: bool,
+    pub is_exec: bool,
+}
+
+pub fn get_files_and_dirs(dir: &Path) -> Vec<FileInfo> {
     match fs::read_dir(dir) {
         Ok(entries) => entries
             .filter_map(|entry| entry.ok())
@@ -13,14 +20,20 @@ pub fn get_files_and_dirs(dir: &Path) -> Vec<(String, Option<fs::Permissions>, b
                 let name = path.file_name().unwrap().to_str().unwrap().to_string();
                 let is_dir = path.is_dir();
                 let perms = entry.metadata().ok().map(|meta| meta.permissions());
-                (name, perms, is_dir)
+                let is_exec = perms.as_ref().map_or(false, |p| is_executable(p));
+                FileInfo {
+                    name,
+                    perms,
+                    is_dir,
+                    is_exec
+                }
             })
             .collect(),
         Err(_) => Vec::new(),
     }
 }
 
-pub fn get_parent_content(dir: &Path) -> Vec<(String, Option<fs::Permissions>, bool)> {
+pub fn get_parent_content(dir: &Path) -> Vec<FileInfo> {
     dir.parent()
         .map_or(Vec::new(), |parent| get_files_and_dirs(parent))
 }
@@ -94,4 +107,16 @@ pub fn get_permissions(metadata: &fs::Permissions) -> String {
             "rw-rw-rw-".to_string()
         }
     }
+}
+
+#[cfg(unix)]
+pub fn is_executable(metadata: &fs::Permissions) -> bool {
+    let perms_unix = metadata.mode();
+    (perms_unix & 0o100 != 0) || (perms_unix & 0o010 != 0) || (perms_unix & 0o001 != 0)
+}
+
+#[cfg(windows)]
+pub fn is_executable(_metadata: &fs::Permissions) -> bool {
+    // Windows executability is not determined solely by file permissions.
+    false
 }

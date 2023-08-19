@@ -1,14 +1,13 @@
 use crossterm::event::{self, KeyCode, KeyEvent};
 use tui::widgets::ListState;
 use super::fs_utils::*;
-use std::fs;
 
 pub fn handle_input(
     current_dir: &mut std::path::PathBuf,
     selected_dir: &mut std::path::PathBuf,
     middle_state: &mut ListState,
     left_state: &mut ListState,
-    files: &[(String, Option<fs::Permissions>, bool)],
+    files: &[FileInfo],
 ) -> bool {
     match event::read().unwrap() {
         event::Event::Key(KeyEvent { code, .. }) => {
@@ -22,7 +21,7 @@ pub fn handle_input(
                 KeyCode::Char('l') => {
                     if let Some(index) = middle_state.selected() {
                         if index < files.len() {
-                            let potential_dir = current_dir.join(&files[index].0);
+                            let potential_dir = current_dir.join(&files[index].name);
                             if potential_dir.is_dir() {
                                 *current_dir = potential_dir;
                                 middle_state.select(Some(0));

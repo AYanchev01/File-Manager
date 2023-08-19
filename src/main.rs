@@ -39,8 +39,8 @@ fn main() {
 
         if let Some(selected) = middle_state.selected() {
             if selected < files.len() {
-                let path = current_dir.join(&files[selected].0);
-                if path.is_dir() {
+                let path = current_dir.join(&files[selected].name);
+                if files[selected].is_dir {
                     selected_dir = path; 
                 } else {
                     selected_dir = PathBuf::new();  // Empty pathbuf to indicate it's a file
@@ -50,11 +50,21 @@ fn main() {
 
         let children = if selected_dir.as_os_str().is_empty() {
             // if selected_dir is empty, it means the selection is a file
-            vec![("contents of file".to_string(), None, false)]
+            vec![FileInfo {
+                name: "contents of file".to_string(),
+                perms: None,
+                is_dir: false,
+                is_exec: false,
+            }]
         } else {
             let contents = get_files_and_dirs(&selected_dir);
             if contents.is_empty() {
-                vec![("empty".to_string(), None, false)]
+                vec![FileInfo {
+                    name: "empty".to_string(),
+                    perms: None,
+                    is_dir: false,
+                    is_exec: false,
+                }]
             } else {
                 contents
             }
