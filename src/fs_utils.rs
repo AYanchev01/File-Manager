@@ -39,49 +39,30 @@ pub fn get_parent_content(dir: &Path) -> Vec<FileInfo> {
 }
 
 pub fn move_down(middle_state: &mut ListState, max_len: usize) {
-    increment_selection(middle_state, max_len);
+    adjust_selection(middle_state, max_len, true);
 }
 
 pub fn move_up(middle_state: &mut ListState, max_len: usize) {
-    decrement_selection(middle_state, max_len);
+    adjust_selection(middle_state, max_len, false);
 }
 
-fn increment_selection(state: &mut ListState, max_len: usize) {
+fn adjust_selection(state: &mut ListState, max_len: usize, increment: bool) {
     if max_len == 0 {
         state.select(None);
         return;
     }
     let i = match state.selected() {
         Some(i) => {
-            if i >= max_len - 1 {
-                0
+            if increment {
+                if i >= max_len - 1 { 0 } else { i + 1 }
             } else {
-                i + 1
+                if i == 0 { max_len - 1 } else { i - 1 }
             }
         },
         None => 0,
     };
     state.select(Some(i));
 }
-
-fn decrement_selection(state: &mut ListState, max_len: usize) {
-    if max_len == 0 {
-        state.select(None);
-        return;
-    }
-    let i = match state.selected() {
-        Some(i) => {
-            if i == 0 {
-                max_len - 1
-            } else {
-                i - 1
-            }
-        },
-        None => 0,
-    };
-    state.select(Some(i));
-}
-
 pub fn get_permissions(metadata: &fs::Permissions) -> String {
     #[cfg(unix)]
     {

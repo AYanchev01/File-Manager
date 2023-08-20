@@ -1,8 +1,20 @@
-use tui::widgets::{Block, Borders, List, ListItem, ListState};
-use tui::layout::Rect;
-use tui::style::{self, Color};
-use super::fs_utils;
-use super::fs_utils::FileInfo;
+use tui::{
+    widgets::{Block, Borders, List, ListItem, ListState},
+    layout::Rect,
+    style::{Color, Style},
+    Frame,
+    backend::CrosstermBackend,
+};
+use std::io::Stdout;
+
+use super::fs_utils::{self, FileInfo};
+
+// Constants for repeated styles
+const DIR_COLOR: Color = Color::Blue;
+const EXEC_COLOR: Color = Color::Green;
+const FILE_COLOR: Color = Color::White;
+
+const SELECTED_BG_COLOR: Color = Color::Black;
 
 #[derive(PartialEq)]
 pub enum PaneType {
@@ -11,8 +23,24 @@ pub enum PaneType {
     Right,
 }
 
+fn get_style_for_file(file_info: &FileInfo, is_selected: bool) -> Style {
+    let (fg, bg) = if file_info.is_dir {
+        (DIR_COLOR, SELECTED_BG_COLOR)
+    } else if file_info.is_exec {
+        (EXEC_COLOR, SELECTED_BG_COLOR)
+    } else {
+        (FILE_COLOR, SELECTED_BG_COLOR)
+    };
+
+    if is_selected {
+        Style::default().fg(bg).bg(fg)
+    } else {
+        Style::default().fg(fg)
+    }
+}
+
 pub fn render_pane(
-    f: &mut tui::Frame<tui::backend::CrosstermBackend<std::io::Stdout>>,
+    f: &mut Frame<CrosstermBackend<Stdout>>,
     chunk: Rect,
     items: &[FileInfo],
     state: &mut ListState,
@@ -20,46 +48,22 @@ pub fn render_pane(
 ) {
     let list_items: Vec<ListItem> = items.iter().enumerate().map(|(index, file_info)| {
         let item_content = match pane_type {
-            PaneType::Middle => {
-                if let Some(permissions) = &file_info.perms {
-                    let perms_str = fs_utils::get_permissions(permissions);
-                    format!("{:<width$} {}", file_info.name, perms_str, width = chunk.width as usize - perms_str.len() - 4)
-                } else {
-                    file_info.name.clone()
-                }
+            PaneType::Middle if file_info.perms.is_some() => {
+                let perms_str = fs_utils::get_permissions(&file_info.perms.as_ref().unwrap());
+                format!("{:<width$} {}", file_info.name, perms_str, width = chunk.width as usize - perms_str.len() - 4)
             }
             _ => file_info.name.clone(),
         };
 
-        // Style for the normal, non-selected state
-        let normal_style = if file_info.is_dir {
-            style::Style::default().fg(Color::Blue)
-        } else if file_info.is_exec {
-            style::Style::default().fg(Color::Green)
-        } else {
-            style::Style::default().fg(Color::White)
-        };
+        let is_selected = Some(index) == state.selected();
 
-        // Style for when the item is selected
-        let selected_style = if file_info.is_dir {
-            style::Style::default().fg(Color::Black).bg(Color::Blue)
-        } else if file_info.is_exec {
-            style::Style::default().fg(Color::Black).bg(Color::Green)
-        } else {
-            style::Style::default().fg(Color::Black).bg(Color::White)
-        };
-
-        // Apply styles
-        if Some(index) == state.selected() {
-            ListItem::new(item_content).style(selected_style)
-        } else {
-            ListItem::new(item_content).style(normal_style)
-        }
+        let item_style = get_style_for_file(file_info, is_selected);
+        ListItem::new(item_content).style(item_style)
     }).collect();
 
     let files_list = List::new(list_items)
         .block(Block::default().borders(Borders::ALL))
-        .highlight_style(style::Style::default());
+        .highlight_style(Style::default());
 
     f.render_stateful_widget(files_list, chunk, state);
 }
