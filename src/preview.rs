@@ -14,19 +14,20 @@ fn is_text_file(path: &Path) -> bool {
     false
 }
 
-pub fn get_file_preview(path: &PathBuf, max_lines: usize) -> Result<String, Box<dyn std::error::Error>> {
+pub fn get_file_preview(path: &PathBuf, scroll_position: usize, max_lines: usize) -> Result<(String, usize), Box<dyn std::error::Error>> {
     if is_text_file(path) {
         let mut file = File::open(path)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
 
-        let truncated_contents = contents.lines()
-            .take(max_lines)
-            .collect::<Vec<_>>()
-            .join("\n");
+        let lines: Vec<_> = contents.lines().collect();
+        let start_index = scroll_position.min(lines.len().saturating_sub(max_lines));
+        let truncated_contents = lines[start_index..start_index + max_lines.min(lines.len() - start_index)].join("\n");
 
-        Ok(truncated_contents)
+        let total_lines = lines.len();
+        let max_scroll_position = if total_lines > max_lines { total_lines - max_lines } else { 0 };
+        Ok((truncated_contents, max_scroll_position))
     } else {
-        Ok("Can't preview file".to_string())
+        Ok(("Can't preview file".to_string(),0))
     }
 }
