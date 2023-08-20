@@ -6,7 +6,6 @@ use tui::backend::CrosstermBackend;
 use tui::layout::{Layout, Constraint, Direction};
 use crossterm::terminal;
 use tui::widgets::ListState;
-use std::path::PathBuf;
 use std::env;
 
 mod ui;
@@ -15,6 +14,8 @@ mod fs_utils;
 use fs_utils::*;
 mod input_handler;
 use input_handler::*;
+mod preview;
+use preview::*;
 
 fn main() {
     // Initialize crossterm
@@ -41,21 +42,43 @@ fn main() {
             if selected < files.len() {
                 let path = current_dir.join(&files[selected].name);
                 if files[selected].is_dir {
-                    selected_dir = path; 
+                    selected_dir = path;
                 } else {
-                    selected_dir = PathBuf::new();  // Empty pathbuf to indicate it's a file
+                    selected_dir = path;
                 }
             }
         }
 
+
+        let terminal_size = terminal.size().unwrap();
+        let approx_right_pane_height = (terminal_size.height as usize - 4) * 95 / 100;
+
         let children = if selected_dir.as_os_str().is_empty() {
-            // if selected_dir is empty, it means the selection is a file
             vec![FileInfo {
-                name: "contents of file".to_string(),
+                name: "Select a directory or file".to_string(),
                 perms: None,
                 is_dir: false,
-                is_exec: false,
+                is_exec: false
             }]
+        } else if selected_dir.is_file() {
+            match get_file_preview(&selected_dir, approx_right_pane_height) {
+                Ok(preview_text) => {
+                    vec![FileInfo {
+                        name: preview_text,
+                        perms: None,
+                        is_dir: false,
+                        is_exec: false
+                    }]
+                },
+                Err(_) => {
+                    vec![FileInfo {
+                        name: "Failed to load file preview".to_string(),
+                        perms: None,
+                        is_dir: false,
+                        is_exec: false
+                    }]
+                }
+            }
         } else {
             let contents = get_files_and_dirs(&selected_dir);
             if contents.is_empty() {
