@@ -6,7 +6,6 @@ use tui::backend::CrosstermBackend;
 use tui::layout::{Layout, Constraint, Direction};
 use crossterm::terminal;
 use tui::widgets::ListState;
-use std::path::PathBuf;
 use std::env;
 
 mod ui;
@@ -15,6 +14,8 @@ mod fs_utils;
 use fs_utils::*;
 mod input_handler;
 use input_handler::*;
+mod preview;
+use preview::*;
 
 fn main() {
     // Initialize crossterm
@@ -26,6 +27,7 @@ fn main() {
 
     let mut current_dir = env::current_dir().unwrap();
     let mut selected_dir = current_dir.clone();
+    let mut scroll_position = 0;
 
     let mut left_state = ListState::default();
     let mut middle_state = ListState::default();
@@ -41,34 +43,61 @@ fn main() {
             if selected < files.len() {
                 let path = current_dir.join(&files[selected].name);
                 if files[selected].is_dir {
-                    selected_dir = path; 
+                    selected_dir = path;
                 } else {
-                    selected_dir = PathBuf::new();  // Empty pathbuf to indicate it's a file
+                    // selected_dir = path;
+                    if selected_dir != path {
+                        scroll_position = 0;
+                        selected_dir = path;
+                    }
                 }
             }
         }
 
-        let children = if selected_dir.as_os_str().is_empty() {
-            // if selected_dir is empty, it means the selection is a file
-            vec![FileInfo {
-                name: "contents of file".to_string(),
-                perms: None,
-                is_dir: false,
-                is_exec: false,
-            }]
-        } else {
-            let contents = get_files_and_dirs(&selected_dir);
-            if contents.is_empty() {
-                vec![FileInfo {
-                    name: "empty".to_string(),
+
+        let terminal_size = terminal.size().unwrap();
+        let approx_right_pane_height = (terminal_size.height as usize - 4) * 95 / 100;
+
+        let (children, max_scroll) = 
+            if selected_dir.as_os_str().is_empty() {
+                (vec![FileInfo {
+                    name: "Select a directory or file".to_string(),
                     perms: None,
                     is_dir: false,
-                    is_exec: false,
-                }]
+                    is_exec: false
+                }], 0)
+            } else if selected_dir.is_file() {
+                match get_file_preview(&selected_dir, scroll_position, approx_right_pane_height) {
+                    Ok((preview_text, max_scroll_position)) => {
+                        (vec![FileInfo {
+                            name: preview_text,
+                            perms: None,
+                            is_dir: false,
+                            is_exec: false
+                        }], max_scroll_position)
+                    },
+                    Err(_) => {
+                        (vec![FileInfo {
+                            name: "Failed to load file preview".to_string(),
+                            perms: None,
+                            is_dir: false,
+                            is_exec: false
+                        }], 0)
+                    }
+                }
             } else {
-                contents
-            }
-        };
+                let contents = get_files_and_dirs(&selected_dir);
+                if contents.is_empty() {
+                    (vec![FileInfo {
+                        name: "empty".to_string(),
+                        perms: None,
+                        is_dir: false,
+                        is_exec: false,
+                    }], 0)
+                } else {
+                    (contents, 0)
+                }
+            };
 
         terminal.draw(|f| {
             let chunks = Layout::default()
@@ -90,7 +119,7 @@ fn main() {
         }).unwrap();
 
         // Handle input
-        if handle_input(&mut current_dir, &mut selected_dir, &mut middle_state, &mut left_state, &files) {
+        if handle_input(&mut current_dir, &mut selected_dir, &mut middle_state, &mut left_state, &files, &mut scroll_position, &max_scroll) {
             break;
         }
     }

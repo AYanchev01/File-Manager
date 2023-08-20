@@ -8,6 +8,8 @@ pub fn handle_input(
     middle_state: &mut ListState,
     left_state: &mut ListState,
     files: &[FileInfo],
+    scroll_position: &mut usize,
+    max_scroll: &usize,
 ) -> bool {
     match event::read().unwrap() {
         event::Event::Key(KeyEvent { code, .. }) => {
@@ -36,6 +38,16 @@ pub fn handle_input(
                         left_state.select(None);
                     }
                     middle_state.select(Some(0));
+                }
+                KeyCode::Up => {
+                    if *scroll_position > 0 {
+                        *scroll_position -= 1;
+                    }
+                }
+                KeyCode::Down => {
+                    if *scroll_position < *max_scroll {
+                        *scroll_position += 1;
+                    }
                 }
                 KeyCode::Char('q') | KeyCode::Esc => {
                     return true;
