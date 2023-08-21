@@ -1,5 +1,6 @@
 use crossterm::event::{self, KeyCode, KeyEvent};
 use tui::widgets::ListState;
+use crate::fs_utils;
 use super::fs_utils::*;
 
 const MOVE_DOWN: char = 'j';
@@ -10,12 +11,12 @@ const QUIT: char = 'q';
 
 pub fn handle_input(
     current_dir: &mut std::path::PathBuf,
-    selected_dir: &mut std::path::PathBuf,
     middle_state: &mut ListState,
     left_state: &mut ListState,
     files: &[FileInfo],
     scroll_position: &mut usize,
     max_scroll: &usize,
+    selected_file_for_copy: &mut Option<std::path::PathBuf>,
 ) -> bool {
     match event::read().unwrap() {
         event::Event::Key(KeyEvent { code, .. }) => match code {
@@ -57,6 +58,49 @@ pub fn handle_input(
             KeyCode::Down => {
                 if *scroll_position < *max_scroll {
                     *scroll_position += 1;
+                }
+            },
+
+            // Copy file/directory
+            KeyCode::Char('y') => {
+                if let Some(index) = middle_state.selected() {
+                    if index < files.len() {
+                        let potential_file = current_dir.join(&files[index].name);
+                        if potential_file.exists() {
+                            *selected_file_for_copy = Some(potential_file);
+                        }
+                    }
+                }
+            }
+
+            // Paste file/directory
+            KeyCode::Char('p') => {
+                if let Some(ref src) = *selected_file_for_copy {
+                    let dest = make_unique_path(current_dir.join(src.file_name().unwrap_or_default()));
+                    match fs_utils::copy(src, &dest) {
+                        Ok(_) => {},
+                        Err(e) => {
+                            // Just print error message for now
+                            println!("Error while copying: {}", e);
+                        }
+                    }
+                    // *selected_file_for_copy = None;
+                }
+            },
+
+            // Delete file/directory
+            KeyCode::Char('d') => {
+                if let Some(index) = middle_state.selected() {
+                    if index < files.len() {
+                        let potential_file = current_dir.join(&files[index].name);
+                        match fs_utils::delete(&potential_file) {
+                            Ok(_) => {},
+                            Err(e) => {
+                                // Just print error message for now
+                                println!("Error while copying: {}", e);
+                            }
+                        }
+                    }
                 }
             },
 

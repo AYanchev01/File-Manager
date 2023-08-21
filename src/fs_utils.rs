@@ -1,5 +1,6 @@
 use std::fs;
-use std::path::Path;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 use tui::widgets::ListState;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -100,4 +101,78 @@ pub fn is_executable(metadata: &fs::Permissions) -> bool {
 pub fn is_executable(_metadata: &fs::Permissions) -> bool {
     // Windows executability is not determined solely by file permissions.
     false
+}
+
+pub fn make_unique_path(mut path: PathBuf) -> PathBuf {
+    let original_path = path.clone();
+    let mut counter = 1;
+
+    while path.exists() {
+        if let Some(extension) = original_path.extension() {
+            let new_stem = format!("{}_{}", original_path.file_stem().unwrap().to_string_lossy(), counter);
+            path.set_file_name(new_stem);
+            path.set_extension(extension);
+        } else {
+            let new_name = format!("{}_{}", original_path.file_name().unwrap().to_string_lossy(), counter);
+            path.set_file_name(&new_name);
+        }
+        counter += 1;
+    }
+
+    path
+}
+
+pub fn copy(src: &Path, dest: &Path) -> std::io::Result<()> {
+    if src.is_dir() {
+        copy_dir_to(src, dest)
+    } else {
+        paste_file(src, dest)
+    }
+}
+
+pub fn delete(path: &Path) -> std::io::Result<()> {
+    if path.is_dir() {
+        delete_dir(path)
+    } else {
+        delete_file(path)
+    }
+}
+
+pub fn paste_file(src: &Path, dest: &Path) -> std::io::Result<()> {
+    let mut src_file = fs::File::open(src)?;
+    let mut contents = Vec::new();
+    src_file.read_to_end(&mut contents)?;
+
+    let mut dest_file = fs::File::create(dest)?;
+    dest_file.write_all(&contents)?;
+
+    Ok(())
+}
+
+pub fn copy_dir_to(src: &Path, dst: &Path) -> std::io::Result<()> {
+    if !dst.exists() {
+        fs::create_dir(dst)?;
+    }
+    
+    for entry_result in fs::read_dir(src)? {
+        let entry = entry_result?;
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            copy_dir_to(&entry.path(), &dst.join(entry.file_name()))?;
+        } else {
+            fs::copy(&entry.path(), &dst.join(entry.file_name()))?;
+        }
+    }
+    
+    Ok(())
+}
+
+pub fn delete_file(path: &Path) -> std::io::Result<()> {
+    fs::remove_file(path)?;
+    Ok(())
+}
+
+pub fn delete_dir(path: &Path) -> std::io::Result<()> {
+    fs::remove_dir_all(path)?;
+    Ok(())
 }
