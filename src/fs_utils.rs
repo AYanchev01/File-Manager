@@ -55,15 +55,16 @@ fn adjust_selection(state: &mut ListState, max_len: usize, increment: bool) {
     let i = match state.selected() {
         Some(i) => {
             if increment {
-                if i >= max_len - 1 { 0 } else { i + 1 }
+                if i >= max_len - 1 { i } else { i + 1 }
             } else {
-                if i == 0 { max_len - 1 } else { i - 1 }
+                if i == 0 { i } else { i - 1 }
             }
         },
         None => 0,
     };
     state.select(Some(i));
 }
+
 pub fn get_permissions(metadata: &fs::Permissions) -> String {
     #[cfg(unix)]
     {
