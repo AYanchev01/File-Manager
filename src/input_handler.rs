@@ -3,20 +3,21 @@ use tui::widgets::ListState;
 use crate::fs_utils;
 use super::fs_utils::*;
 
-const MOVE_DOWN: char = 'j';
-const MOVE_UP: char = 'k';
-const MOVE_IN: char = 'l';
-const MOVE_OUT: char = 'h';
-const QUIT: char = 'q';
-const GO_TO_TOP: char = 'g';
-const GO_TO_BOTTOM: char = 'G';
-const END_OF_FILE: char = '$';
-const BEGINNING_OF_FILE: char = '^';
-const COPY: char = 'y';
-const PASTE: char = 'p';
-const DELETE: char = 'd';
-const MOVE_UP_HALF_PAGE: char = 'u';
-const MOVE_DOWN_HALF_PAGE: char = 'd';
+const MOVE_DOWN:            char = 'j';
+const MOVE_UP:              char = 'k';
+const MOVE_IN:              char = 'l';
+const MOVE_OUT:             char = 'h';
+const QUIT:                 char = 'q';
+const GO_TO_TOP:            char = 'g';
+const GO_TO_BOTTOM:         char = 'G';
+const END_OF_FILE:          char = '$';
+const BEGINNING_OF_FILE:    char = '^';
+const COPY:                 char = 'y';
+const PASTE:                char = 'p';
+const DELETE:               char = 'd';
+const CUT:                  char = 'x';
+const MOVE_UP_HALF_PAGE:    char = 'u';
+const MOVE_DOWN_HALF_PAGE:  char = 'd';
 
 pub fn handle_input(
     current_dir: &mut std::path::PathBuf,
@@ -32,6 +33,8 @@ pub fn handle_input(
     let half_screen = (terminal_size.1 as usize - 4) * 95 / 200;
 
     static mut LAST_KEY_PRESSED: Option<char> = None;
+    // Flag for checking if a file was cut
+    static mut WAS_CUT: bool = false;
 
     match event::read().unwrap() {
         event::Event::Key(KeyEvent { code, modifiers, .. }) => match (code,modifiers) {
@@ -116,6 +119,20 @@ pub fn handle_input(
                         let potential_file = current_dir.join(&files[index].name);
                         if potential_file.exists() {
                             *selected_file_for_copy = Some(potential_file);
+                            unsafe { WAS_CUT = false; }
+                        }
+                    }
+                }
+            }
+
+            // Cut file/directory
+            (KeyCode::Char(CUT), _) => {
+                if let Some(index) = middle_state.selected() {
+                    if index < files.len() {
+                        let potential_file = current_dir.join(&files[index].name);
+                        if potential_file.exists() {
+                            *selected_file_for_copy = Some(potential_file);
+                            unsafe { WAS_CUT = true; }
                         }
                     }
                 }
@@ -124,15 +141,32 @@ pub fn handle_input(
             // Paste file/directory
             (KeyCode::Char(PASTE), _) => {
                 if let Some(ref src) = *selected_file_for_copy {
-                    let dest = make_unique_path(current_dir.join(src.file_name().unwrap_or_default()));
-                    match fs_utils::copy(src, &dest) {
-                        Ok(_) => {},
-                        Err(e) => {
-                            // Just print error message for now
-                            println!("Error while copying: {}", e);
+                    let original_dest = current_dir.join(src.file_name().unwrap_or_default());
+                    
+                    // If the file was cut use the original dest, otherwise make it unique for copy
+                    let dest = if unsafe { WAS_CUT } {
+                        original_dest
+                    } else {
+                        make_unique_path(original_dest)
+                    };
+
+                    if unsafe { WAS_CUT } {
+                        match fs_utils::move_file(src, &dest) {
+                            Ok(_) => {},
+                            Err(e) => {
+                                println!("Error while moving: {}", e);
+                            }
+                        }
+                    } else {
+                        match fs_utils::copy(src, &dest) {
+                            Ok(_) => {},
+                            Err(e) => {
+                                println!("Error while copying: {}", e);
+                            }
                         }
                     }
                     // *selected_file_for_copy = None;
+                    // unsafe { WAS_CUT = false; }
                 }
             },
 
@@ -145,7 +179,7 @@ pub fn handle_input(
                             Ok(_) => {},
                             Err(e) => {
                                 // Just print error message for now
-                                println!("Error while copying: {}", e);
+                                println!("Error while deleting: {}", e);
                             }
                         }
                     }

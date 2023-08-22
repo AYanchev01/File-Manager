@@ -177,3 +177,13 @@ pub fn delete_dir(path: &Path) -> std::io::Result<()> {
     fs::remove_dir_all(path)?;
     Ok(())
 }
+
+// Try unix rename; only works if src & dest are on the same fs; copy+delete otherwise 
+pub fn move_file(src: &Path, dest: &Path) -> std::io::Result<()> {
+    if let Err(_) = fs::rename(src, dest) {
+        copy(src, dest)?;
+        delete(src)?;
+    }
+
+    Ok(())
+}
