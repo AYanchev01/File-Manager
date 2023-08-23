@@ -1,7 +1,6 @@
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use tui::widgets::ListState;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
@@ -37,32 +36,6 @@ pub fn get_files_and_dirs(dir: &Path) -> Vec<FileInfo> {
 pub fn get_parent_content(dir: &Path) -> Vec<FileInfo> {
     dir.parent()
         .map_or(Vec::new(), |parent| get_files_and_dirs(parent))
-}
-
-pub fn move_down(middle_state: &mut ListState, max_len: usize) {
-    adjust_selection(middle_state, max_len, true);
-}
-
-pub fn move_up(middle_state: &mut ListState, max_len: usize) {
-    adjust_selection(middle_state, max_len, false);
-}
-
-fn adjust_selection(state: &mut ListState, max_len: usize, increment: bool) {
-    if max_len == 0 {
-        state.select(None);
-        return;
-    }
-    let i = match state.selected() {
-        Some(i) => {
-            if increment {
-                if i >= max_len - 1 { i } else { i + 1 }
-            } else {
-                if i == 0 { i } else { i - 1 }
-            }
-        },
-        None => 0,
-    };
-    state.select(Some(i));
 }
 
 pub fn get_permissions(metadata: &fs::Permissions) -> String {

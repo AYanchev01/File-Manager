@@ -18,6 +18,25 @@ use fs_utils::*;
 use input_handler::*;
 use preview::*;
 
+pub struct AppState {
+    last_key_pressed: Option<char>,
+    was_cut: bool,
+    terminal_height: usize,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        // Calculate the half screen size
+        let terminal_size = crossterm::terminal::size().unwrap();
+
+        AppState {
+            last_key_pressed: None,
+            was_cut: false,
+            terminal_height : (terminal_size.1 as usize - 4) * 95 / 100,
+        }
+    }
+}
+
 fn main() {
     // Initialize crossterm
     terminal::enable_raw_mode().unwrap();
@@ -25,6 +44,8 @@ fn main() {
     let backend = CrosstermBackend::new(std::io::stdout());
     let mut terminal = Terminal::new(backend).unwrap();
     terminal.clear().unwrap();
+
+    let mut app_state = AppState::new();
 
     // Initialize directories and states
     let mut current_dir = env::current_dir().unwrap();
@@ -43,9 +64,7 @@ fn main() {
         let files = get_files_and_dirs(&current_dir);
         update_selected_dir(&files, &current_dir, &mut selected_dir, &middle_state, &mut scroll_position);
 
-        let terminal_size = terminal.size().unwrap();
-        let approx_right_pane_height = (terminal_size.height as usize - 4) * 95 / 100;
-        let (children, max_scroll) = fetch_children(&selected_dir, scroll_position, approx_right_pane_height);
+        let (children, max_scroll) = fetch_children(&selected_dir, scroll_position, app_state.terminal_height);
 
         // Render UI
         terminal.draw(|f| {
@@ -55,8 +74,8 @@ fn main() {
                 .constraints(
                     [
                         Constraint::Percentage(20),
-                        Constraint::Percentage(40),
-                        Constraint::Percentage(40),
+                        Constraint::Percentage(30),
+                        Constraint::Percentage(50),
                     ]
                     .as_ref(),
                 )
@@ -68,7 +87,7 @@ fn main() {
         }).unwrap();
 
         // Handle input
-        if handle_input(&mut current_dir, &mut middle_state, &mut left_state, &files, &mut scroll_position, &max_scroll, &mut selected_file_for_copy) {
+        if handle_input(&mut current_dir, &mut middle_state, &mut left_state, &files, &mut scroll_position, &max_scroll, &mut selected_file_for_copy, &mut app_state) {
             break;
         }
     }
@@ -90,11 +109,11 @@ fn update_selected_dir(files: &[FileInfo], current_dir: &std::path::PathBuf, sel
     }
 }
 
-fn fetch_children(selected_dir: &std::path::PathBuf, scroll_position: usize, approx_right_pane_height: usize) -> (Vec<FileInfo>, usize) {
+fn fetch_children(selected_dir: &std::path::PathBuf, scroll_position: usize, right_pane_height: usize) -> (Vec<FileInfo>, usize) {
     if selected_dir.as_os_str().is_empty() {
         return (vec![create_file_info("Select a directory or file".to_string())], 0);
     } else if selected_dir.is_file() {
-        match get_file_preview(&selected_dir, scroll_position, approx_right_pane_height) {
+        match get_file_preview(&selected_dir, scroll_position, right_pane_height) {
             Ok((preview_text, max_scroll_position)) => {
                 (vec![create_file_info(preview_text)], max_scroll_position)
             },
