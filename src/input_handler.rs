@@ -1,4 +1,4 @@
-use crossterm::event::{self, KeyCode, KeyEvent};
+use crossterm::event::{self, KeyCode, KeyEvent, KeyModifiers};
 use tui::widgets::ListState;
 use crate::{fs_utils, AppState};
 use super::fs_utils::*;
@@ -10,8 +10,6 @@ const MOVE_OUT:             char = 'h';
 const QUIT:                 char = 'q';
 const GO_TO_TOP:            char = 'g';
 const GO_TO_BOTTOM:         char = 'G';
-const END_OF_FILE:          char = '$';
-const BEGINNING_OF_FILE:    char = '^';
 const COPY:                 char = 'y';
 const PASTE:                char = 'p';
 const DELETE:               char = 'd';
@@ -31,29 +29,34 @@ pub fn handle_input(
 ) -> bool {
 
     match event::read().unwrap() {
-        event::Event::Key(KeyEvent { code, modifiers, .. }) => match (code,modifiers) {
-            (KeyCode::Char(MOVE_IN),_) => navigate_in(current_dir, middle_state, files),
-            (KeyCode::Char(MOVE_OUT),_) => navigate_out(current_dir, middle_state, left_state),
-            (KeyCode::Char(MOVE_UP), crossterm::event::KeyModifiers::ALT) => scroll_up_alt(scroll_position),
-            (KeyCode::Char(MOVE_DOWN), crossterm::event::KeyModifiers::ALT) => scroll_down_alt(scroll_position, max_scroll),
-            (KeyCode::Char(MOVE_DOWN_HALF_PAGE), crossterm::event::KeyModifiers::CONTROL) => scroll_down_half_ctrl(middle_state, files.len(), app_state.terminal_height / 2),
-            (KeyCode::Char(MOVE_UP_HALF_PAGE), crossterm::event::KeyModifiers::CONTROL) => scroll_up_half_ctrl(middle_state, files.len(), app_state.terminal_height / 2),
-            (KeyCode::Char(MOVE_DOWN),_) => move_down(middle_state, files.len()),
-            (KeyCode::Char(MOVE_UP),_) => move_up(middle_state, files.len()),
-            (KeyCode::Char(MOVE_DOWN_HALF_PAGE), crossterm::event::KeyModifiers::ALT) => scroll_down_half_alt(scroll_position, app_state.terminal_height / 2, max_scroll),
-            (KeyCode::Char(MOVE_UP_HALF_PAGE), crossterm::event::KeyModifiers::ALT) => scroll_up_half_alt(scroll_position, app_state.terminal_height / 2),
-            (KeyCode::Char(COPY), _) => copy_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
-            (KeyCode::Char(CUT), _) => cut_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
-            (KeyCode::Char(PASTE), _) => paste_file(current_dir, selected_file_for_copy, app_state),
-            (KeyCode::Char(DELETE), _) => delete_file(current_dir, middle_state, files),
-            (KeyCode::Char(BEGINNING_OF_FILE), crossterm::event::KeyModifiers::ALT) => scroll_to_top_alt(scroll_position),
-            (KeyCode::Char(END_OF_FILE), crossterm::event::KeyModifiers::ALT) => scroll_to_end_alt(scroll_position, max_scroll),
-            (KeyCode::Char(GO_TO_TOP), _) => go_to_top(middle_state, app_state),
-            (KeyCode::Char(GO_TO_BOTTOM), _) => go_to_bottom(middle_state, files.len()),
-            (KeyCode::Char(QUIT), _) | (KeyCode::Esc, _) => return handle_quit(),
-            _ => {
-                app_state.last_key_pressed = None;
-            },
+        event::Event::Key(KeyEvent { code, modifiers, .. }) => {
+            app_state.last_modifier = Some(modifiers);
+
+            match (code,modifiers) {
+                (KeyCode::Char(MOVE_IN),_) => navigate_in(current_dir, middle_state, files),
+                (KeyCode::Char(MOVE_OUT),_) => navigate_out(current_dir, middle_state, left_state),
+                (KeyCode::Char(MOVE_UP), KeyModifiers::ALT)
+                | (KeyCode::Char(MOVE_UP), _) => move_up(middle_state,files.len(),scroll_position, app_state),
+                (KeyCode::Char(MOVE_DOWN), KeyModifiers::ALT)
+                | (KeyCode::Char(MOVE_DOWN),_) => move_down(middle_state,files.len(), scroll_position, max_scroll,app_state),
+                (KeyCode::Char(MOVE_DOWN_HALF_PAGE), KeyModifiers::CONTROL)
+                | (KeyCode::Char(MOVE_DOWN_HALF_PAGE), KeyModifiers::ALT) => scroll_down_half(middle_state, files.len(), scroll_position, max_scroll, app_state),
+                (KeyCode::Char(MOVE_UP_HALF_PAGE), KeyModifiers::CONTROL)
+                | (KeyCode::Char(MOVE_UP_HALF_PAGE), KeyModifiers::ALT) => scroll_up_half(middle_state, files.len(), scroll_position, app_state),
+                (KeyCode::Char(COPY), _) => copy_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
+                (KeyCode::Char(CUT), _) => cut_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
+                (KeyCode::Char(PASTE), _) => paste_file(current_dir, selected_file_for_copy, app_state),
+                (KeyCode::Char(DELETE), _) => delete_file(current_dir, middle_state, files),
+                (KeyCode::Char(GO_TO_TOP), KeyModifiers::NONE)
+                | (KeyCode::Char(GO_TO_TOP), _) => move_to_top(middle_state, app_state, scroll_position),
+                (KeyCode::Char(GO_TO_BOTTOM), KeyModifiers::SHIFT)
+                | (KeyCode::Char(GO_TO_BOTTOM), _) => move_to_bottom(middle_state,app_state, files.len(), scroll_position, max_scroll),
+                (KeyCode::Char(QUIT), _) => return handle_quit(),
+                _ => {
+                    app_state.last_key_pressed = None;
+                    app_state.last_modifier = None;
+                },
+            }
         }
         _ => {},
     }
@@ -79,52 +82,60 @@ fn navigate_out(current_dir: &mut std::path::PathBuf, middle_state: &mut ListSta
     }
 }
 
-fn scroll_up_alt(scroll_position: &mut usize) {
-    if *scroll_position > 0 {
-        *scroll_position -= 1;
+fn move_down(middle_state: &mut ListState, max_len: usize,scroll_position: &mut usize,max_scroll: &usize, app_state: &mut AppState) {
+    if app_state.last_modifier == Some(KeyModifiers::ALT) {
+        if *scroll_position < *max_scroll {
+            *scroll_position += 1;
+        }
+    } else if app_state.last_modifier == Some(KeyModifiers::NONE) {
+        adjust_selection(middle_state, max_len, true);
     }
 }
 
-fn scroll_down_alt(scroll_position: &mut usize, max_scroll: &usize) {
-    if *scroll_position < *max_scroll {
-        *scroll_position += 1;
+fn move_up(middle_state: &mut ListState, max_len: usize,scroll_position: &mut usize, app_state: &mut AppState) {
+    if app_state.last_modifier == Some(KeyModifiers::ALT) {
+        if *scroll_position > 0 {
+            *scroll_position -= 1;
+        }
+    } else if app_state.last_modifier == Some(KeyModifiers::NONE) {
+        adjust_selection(middle_state, max_len, false);
     }
 }
 
-fn scroll_down_half_ctrl(middle_state: &mut ListState, files_len: usize, half_screen: usize) {
-    for _ in 0..half_screen{
-        move_down(middle_state, files_len); 
+fn scroll_down_half(middle_state: &mut ListState, files_len: usize, scroll_position: &mut usize,max_scroll: &usize, app_state: &mut AppState) {
+    let half_screen = app_state.terminal_height / 2;
+
+    if app_state.last_modifier == Some(KeyModifiers::CONTROL) {
+        app_state.last_modifier = Some(KeyModifiers::NONE);
+
+        for _ in 0..half_screen{
+            move_down(middle_state, files_len, scroll_position, max_scroll, app_state); 
+        }
+    } else if app_state.last_modifier == Some(KeyModifiers::ALT) {
+        let new_position = *scroll_position + half_screen; 
+        if new_position <= *max_scroll {
+            *scroll_position = new_position;
+        } else {
+            *scroll_position = *max_scroll;
+        }
     }
 }
 
-fn scroll_up_half_ctrl(middle_state: &mut ListState, files_len: usize, half_screen: usize) {
-    for _ in 0..half_screen{
-        move_up(middle_state, files_len); 
-    }
-}
+fn scroll_up_half(middle_state: &mut ListState, files_len: usize, scroll_position: &mut usize, app_state: &mut AppState) {
+    let half_screen = app_state.terminal_height / 2;
 
-fn move_down(middle_state: &mut ListState, max_len: usize) {
-    adjust_selection(middle_state, max_len, true);
-}
-
-fn move_up(middle_state: &mut ListState, max_len: usize) {
-    adjust_selection(middle_state, max_len, false);
-}
-
-fn scroll_down_half_alt(scroll_position: &mut usize ,half_screen: usize, max_scroll: &usize) {
-    let new_position = *scroll_position + half_screen;
-    if new_position <= *max_scroll {
-        *scroll_position = new_position;
-    } else {
-        *scroll_position = *max_scroll;
-    }
-}
-
-fn scroll_up_half_alt(scroll_position: &mut usize, half_screen: usize) {
-    if *scroll_position >= half_screen {
-        *scroll_position -= half_screen;
-    } else {
-        *scroll_position = 0;
+    if app_state.last_modifier == Some(KeyModifiers::CONTROL) {
+        app_state.last_modifier = Some(KeyModifiers::NONE);
+ 
+        for _ in 0..half_screen {
+            move_up(middle_state, files_len,scroll_position, app_state); 
+        }
+    } else if app_state.last_modifier == Some(KeyModifiers::ALT) {
+        if *scroll_position >= half_screen{
+            *scroll_position -= half_screen;
+        } else {
+            *scroll_position = 0;
+        }
     }
 }
 
@@ -198,26 +209,26 @@ fn delete_file(current_dir: &mut std::path::PathBuf, middle_state: &mut ListStat
     }
 }
 
-fn scroll_to_top_alt(scroll_position: &mut usize) {
-    *scroll_position = 0;
-}
-
-fn scroll_to_end_alt(scroll_position: &mut usize, max_scroll: &usize) {
-    *scroll_position = *max_scroll;
-}
-
-fn go_to_top(middle_state: &mut ListState, app_state: &mut AppState) {
+fn move_to_top(middle_state: &mut ListState, app_state: &mut AppState,scroll_position: &mut usize) {
     if app_state.last_key_pressed == Some(GO_TO_TOP) {
-        middle_state.select(Some(0));
+        if app_state.last_modifier == Some(KeyModifiers::NONE) {
+            middle_state.select(Some(0));
+        } else {
+            *scroll_position = 0;
+        }
         app_state.last_key_pressed = None;
     } else {
         app_state.last_key_pressed = Some(GO_TO_TOP);
     }
 }
 
-fn go_to_bottom(middle_state: &mut ListState, files_len: usize) {
-    if files_len > 0 {
-        middle_state.select(Some(files_len - 1));
+fn move_to_bottom(middle_state: &mut ListState, app_state: &mut AppState, files_len: usize, scroll_position: &mut usize, max_scroll: &usize) {
+    if app_state.last_modifier == Some(KeyModifiers::SHIFT) {
+        if files_len > 0 {
+            middle_state.select(Some(files_len - 1));
+        }
+    } else {
+        *scroll_position = *max_scroll;
     }
 }
 

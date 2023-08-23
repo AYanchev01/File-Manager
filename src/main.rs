@@ -20,6 +20,7 @@ use preview::*;
 
 pub struct AppState {
     last_key_pressed: Option<char>,
+    last_modifier: Option<crossterm::event::KeyModifiers>,
     was_cut: bool,
     terminal_height: usize,
 }
@@ -31,6 +32,7 @@ impl AppState {
 
         AppState {
             last_key_pressed: None,
+            last_modifier: None,
             was_cut: false,
             terminal_height : (terminal_size.1 as usize - 4) * 95 / 100,
         }
