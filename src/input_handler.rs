@@ -2,6 +2,8 @@ use crossterm::event::{self, KeyCode, KeyModifiers};
 use tui::widgets::ListState;
 use crate::{fs_utils, AppState};
 use super::fs_utils::*;
+use std::process::{Command, Stdio};
+use std::env;
 
 const MOVE_DOWN:             char = 'j';
 const MOVE_UP:               char = 'k';
@@ -40,6 +42,39 @@ pub fn handle_input(
     false
 }
 
+fn handle_normal_mode(
+    key_code: KeyCode,
+    modifiers: KeyModifiers,
+    current_dir: &mut std::path::PathBuf,
+    middle_state: &mut ListState,
+    left_state: &mut ListState,
+    files: &[FileInfo],
+    scroll_position: &mut usize,
+    max_scroll: &usize,
+    selected_file_for_copy: &mut Option<std::path::PathBuf>,
+    app_state: &mut AppState,
+) -> bool {
+    app_state.prompt_message = None;
+
+    match (key_code, modifiers) {
+        (KeyCode::Char(MOVE_IN),_)               => move_in(current_dir, middle_state, files,app_state),
+        (KeyCode::Char(MOVE_OUT),_)              => move_out(current_dir, middle_state, left_state),
+        (KeyCode::Char(MOVE_UP), _)              => move_up(middle_state,files.len(),scroll_position, app_state),
+        (KeyCode::Char(MOVE_DOWN),_)             => move_down(middle_state,files.len(), scroll_position, max_scroll,app_state),
+        (KeyCode::Char(MOVE_DOWN_HALF_PAGE), _)  => move_down_half(middle_state, files.len(), scroll_position, max_scroll, app_state),
+        (KeyCode::Char(MOVE_UP_HALF_PAGE), _)    => move_up_half(middle_state, files.len(), scroll_position, app_state),
+        (KeyCode::Char(COPY), _)                 => copy_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
+        (KeyCode::Char(CUT), _)                  => cut_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
+        (KeyCode::Char(PASTE), _)                => paste_file(current_dir, selected_file_for_copy, app_state),
+        (KeyCode::Char(DELETE), _)               => handle_delete(middle_state, files, app_state),
+        (KeyCode::Char(GO_TO_TOP), _)            => go_to_top(middle_state, app_state, scroll_position),
+        (KeyCode::Char(GO_TO_BOTTOM), _)         => go_to_bottom(middle_state,app_state, files.len(), scroll_position, max_scroll),
+        (KeyCode::Char(QUIT), _)                 => return handle_quit(),
+        _                                        => { app_state.last_key_pressed = None; app_state.last_modifier = None; },
+    }
+    false
+}
+
 fn handle_delete_mode(
     key_code: KeyCode,
     current_dir: &mut std::path::PathBuf,
@@ -62,44 +97,52 @@ fn handle_delete_mode(
     false
 }
 
-fn handle_normal_mode(
-    key_code: KeyCode,
-    modifiers: KeyModifiers,
-    current_dir: &mut std::path::PathBuf,
-    middle_state: &mut ListState,
-    left_state: &mut ListState,
-    files: &[FileInfo],
-    scroll_position: &mut usize,
-    max_scroll: &usize,
-    selected_file_for_copy: &mut Option<std::path::PathBuf>,
-    app_state: &mut AppState,
-) -> bool {
-    match (key_code, modifiers) {
-        (KeyCode::Char(MOVE_IN),_)               => move_in(current_dir, middle_state, files),
-        (KeyCode::Char(MOVE_OUT),_)              => move_out(current_dir, middle_state, left_state),
-        (KeyCode::Char(MOVE_UP), _)              => move_up(middle_state,files.len(),scroll_position, app_state),
-        (KeyCode::Char(MOVE_DOWN),_)             => move_down(middle_state,files.len(), scroll_position, max_scroll,app_state),
-        (KeyCode::Char(MOVE_DOWN_HALF_PAGE), _)  => move_down_half(middle_state, files.len(), scroll_position, max_scroll, app_state),
-        (KeyCode::Char(MOVE_UP_HALF_PAGE), _)    => move_up_half(middle_state, files.len(), scroll_position, app_state),
-        (KeyCode::Char(COPY), _)                 => copy_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
-        (KeyCode::Char(CUT), _)                  => cut_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
-        (KeyCode::Char(PASTE), _)                => paste_file(current_dir, selected_file_for_copy, app_state),
-        (KeyCode::Char(DELETE), _)               => handle_delete(middle_state, files, app_state),
-        (KeyCode::Char(GO_TO_TOP), _)            => go_to_top(middle_state, app_state, scroll_position),
-        (KeyCode::Char(GO_TO_BOTTOM), _)         => go_to_bottom(middle_state,app_state, files.len(), scroll_position, max_scroll),
-        (KeyCode::Char(QUIT), _)                 => return handle_quit(),
-        _                                        => { app_state.last_key_pressed = None; app_state.last_modifier = None; },
+fn move_in(current_dir: &mut std::path::PathBuf, middle_state: &mut ListState, files: &[FileInfo], app_state: &mut AppState) {
+    if let Some(index) = middle_state.selected() {
+        let potential_path = current_dir.join(&files[index].name);
+        if potential_path.is_dir() {
+            *current_dir = potential_path;
+            middle_state.select(Some(0));
+
+        } else if potential_path.is_file() {
+            let editor = get_editor();
+            
+            let result = if cfg!(unix) {
+                Command::new(&editor)
+                    .arg(potential_path.as_os_str())
+                    .stderr(Stdio::null())
+                    .status()
+            } else if cfg!(windows) {
+                Command::new("cmd")
+                    .args(["/C", &editor, potential_path.to_str().unwrap()])
+                    .stderr(Stdio::null())
+                    .status()
+            } else {
+                Err(std::io::Error::new(std::io::ErrorKind::Other, "Unsupported platform."))
+            };
+            
+            match result {
+                Ok(status) if !status.success() => {
+                    app_state.prompt_message = Some(format!(" Failed to open file with {}.", &editor));
+                }
+                Err(_) => {
+                    app_state.prompt_message = Some(format!(" Failed to open file with {}.", &editor));
+                }
+                _ => {}
+            }
+        }
     }
-    false
 }
 
-fn move_in(current_dir: &mut std::path::PathBuf, middle_state: &mut ListState, files: &[FileInfo]) {
-    if let Some(index) = middle_state.selected() {
-        let potential_dir = current_dir.join(&files[index].name);
-        if potential_dir.is_dir() {
-            *current_dir = potential_dir;
-            middle_state.select(Some(0));
-        }
+fn get_editor() -> String {
+    if let Ok(editor) = env::var("EDITOR") {
+        return editor;
+    } 
+    
+    if cfg!(windows) {
+        "notepad.exe".to_string()
+    } else {
+        "vim".to_string()
     }
 }
 
