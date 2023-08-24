@@ -1,4 +1,4 @@
-use crossterm::event::{self, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{self, KeyCode, KeyModifiers};
 use tui::widgets::ListState;
 use crate::{fs_utils, AppState};
 use super::fs_utils::*;
@@ -16,6 +16,8 @@ const DELETE:                char = 'D';
 const CUT:                   char = 'x';
 const MOVE_UP_HALF_PAGE:     char = 'u';
 const MOVE_DOWN_HALF_PAGE:   char = 'd';
+const YES:                   char = 'y';
+const NO:                    char = 'n';
 
 pub fn handle_input(
     current_dir:             &mut std::path::PathBuf,
@@ -27,29 +29,66 @@ pub fn handle_input(
     selected_file_for_copy:  &mut Option<std::path::PathBuf>,
     app_state:               &mut AppState,
 ) -> bool {
-
-    match event::read().unwrap() {
-        event::Event::Key(KeyEvent { code, modifiers, .. }) => {
-            app_state.last_modifier = Some(modifiers);
-
-            match (code,modifiers) {
-                (KeyCode::Char(MOVE_IN),_)               => move_in(current_dir, middle_state, files),
-                (KeyCode::Char(MOVE_OUT),_)              => move_out(current_dir, middle_state, left_state),
-                (KeyCode::Char(MOVE_UP), _)              => move_up(middle_state,files.len(),scroll_position, app_state),
-                (KeyCode::Char(MOVE_DOWN),_)             => move_down(middle_state,files.len(), scroll_position, max_scroll,app_state),
-                (KeyCode::Char(MOVE_DOWN_HALF_PAGE), _)  => move_down_half(middle_state, files.len(), scroll_position, max_scroll, app_state),
-                (KeyCode::Char(MOVE_UP_HALF_PAGE), _)    => move_up_half(middle_state, files.len(), scroll_position, app_state),
-                (KeyCode::Char(COPY), _)                 => copy_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
-                (KeyCode::Char(CUT), _)                  => cut_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
-                (KeyCode::Char(PASTE), _)                => paste_file(current_dir, selected_file_for_copy, app_state),
-                (KeyCode::Char(DELETE), _)               => delete_file(current_dir, middle_state, files),
-                (KeyCode::Char(GO_TO_TOP), _)            => go_to_top(middle_state, app_state, scroll_position),
-                (KeyCode::Char(GO_TO_BOTTOM), _)         => go_to_bottom(middle_state,app_state, files.len(), scroll_position, max_scroll),
-                (KeyCode::Char(QUIT), _)                 => return handle_quit(),
-                _                                        => { app_state.last_key_pressed = None; app_state.last_modifier = None; },
-            }
+    if let Ok(event::Event::Key(key_event)) = event::read() {
+        app_state.last_modifier = Some(key_event.modifiers);
+        if app_state.is_delete_prompt {
+            return handle_delete_mode(key_event.code, current_dir, middle_state, files, app_state);
+        } else {
+            return handle_normal_mode(key_event.code, key_event.modifiers, current_dir, middle_state, left_state, files, scroll_position, max_scroll, selected_file_for_copy, app_state);
         }
-        _ => {},
+    }
+    false
+}
+
+fn handle_delete_mode(
+    key_code: KeyCode,
+    current_dir: &mut std::path::PathBuf,
+    middle_state: &mut ListState,
+    files: &[FileInfo],
+    app_state: &mut AppState,
+) -> bool {
+    match key_code {
+        KeyCode::Char(YES) => {
+            delete_file(current_dir, middle_state, files);
+            app_state.prompt_message = None;
+            app_state.is_delete_prompt = false;
+        },
+        KeyCode::Char(NO) => {
+            app_state.prompt_message = None;
+            app_state.is_delete_prompt = false;
+        },
+        _ => {}
+    }
+    false
+}
+
+fn handle_normal_mode(
+    key_code: KeyCode,
+    modifiers: KeyModifiers,
+    current_dir: &mut std::path::PathBuf,
+    middle_state: &mut ListState,
+    left_state: &mut ListState,
+    files: &[FileInfo],
+    scroll_position: &mut usize,
+    max_scroll: &usize,
+    selected_file_for_copy: &mut Option<std::path::PathBuf>,
+    app_state: &mut AppState,
+) -> bool {
+    match (key_code, modifiers) {
+        (KeyCode::Char(MOVE_IN),_)               => move_in(current_dir, middle_state, files),
+        (KeyCode::Char(MOVE_OUT),_)              => move_out(current_dir, middle_state, left_state),
+        (KeyCode::Char(MOVE_UP), _)              => move_up(middle_state,files.len(),scroll_position, app_state),
+        (KeyCode::Char(MOVE_DOWN),_)             => move_down(middle_state,files.len(), scroll_position, max_scroll,app_state),
+        (KeyCode::Char(MOVE_DOWN_HALF_PAGE), _)  => move_down_half(middle_state, files.len(), scroll_position, max_scroll, app_state),
+        (KeyCode::Char(MOVE_UP_HALF_PAGE), _)    => move_up_half(middle_state, files.len(), scroll_position, app_state),
+        (KeyCode::Char(COPY), _)                 => copy_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
+        (KeyCode::Char(CUT), _)                  => cut_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
+        (KeyCode::Char(PASTE), _)                => paste_file(current_dir, selected_file_for_copy, app_state),
+        (KeyCode::Char(DELETE), _)               => handle_delete(middle_state, files, app_state),
+        (KeyCode::Char(GO_TO_TOP), _)            => go_to_top(middle_state, app_state, scroll_position),
+        (KeyCode::Char(GO_TO_BOTTOM), _)         => go_to_bottom(middle_state,app_state, files.len(), scroll_position, max_scroll),
+        (KeyCode::Char(QUIT), _)                 => return handle_quit(),
+        _                                        => { app_state.last_key_pressed = None; app_state.last_modifier = None; },
     }
     false
 }
@@ -182,6 +221,18 @@ fn paste_file(current_dir: &mut std::path::PathBuf, selected_file_for_copy: &mut
         }
         *selected_file_for_copy = None;
         app_state.was_cut = false;
+    }
+}
+
+fn handle_delete(middle_state: &mut ListState, files: &[FileInfo], app_state: &mut AppState) {
+    if app_state.prompt_message.is_none() {
+        if let Some(index) = middle_state.selected() {
+            if index < files.len() {
+                let file_name = &files[index].name;
+                app_state.prompt_message = Some(format!(" Are you sure you want to delete {}? (y/n)", file_name));
+                app_state.is_delete_prompt = true;
+            }
+        }
     }
 }
 

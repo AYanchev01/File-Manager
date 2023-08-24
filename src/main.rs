@@ -5,7 +5,7 @@ use crossterm::terminal;
 use tui::backend::CrosstermBackend;
 use tui::layout::{Layout, Constraint, Direction};
 use tui::Terminal;
-use tui::widgets::ListState;
+use tui::widgets::{ListState, Paragraph};
 use std::env;
 
 mod ui;
@@ -23,6 +23,8 @@ pub struct AppState {
     last_modifier: Option<crossterm::event::KeyModifiers>,
     was_cut: bool,
     terminal_height: usize,
+    is_delete_prompt: bool,
+    prompt_message: Option<String>,
 }
 
 impl AppState {
@@ -34,7 +36,9 @@ impl AppState {
             last_key_pressed: None,
             last_modifier: None,
             was_cut: false,
-            terminal_height : (terminal_size.1 as usize - 4) * 95 / 100,
+            terminal_height : (terminal_size.1 as usize - 4) * 90 / 100,
+            is_delete_prompt: false,
+            prompt_message: None,
         }
     }
 }
@@ -70,9 +74,20 @@ fn main() {
 
         // Render UI
         terminal.draw(|f| {
-            let chunks = Layout::default()
-                .direction(Direction::Horizontal)
+            let vertical_chunks = Layout::default()
+                .direction(Direction::Vertical)
                 .margin(2)
+                .constraints(
+                    [
+                        Constraint::Percentage(95), // height of top section
+                        Constraint::Percentage(5), // height of bottom text pane 
+                    ]
+                    .as_ref(),
+                )
+                .split(f.size());
+
+            let horizontal_chunks = Layout::default()
+                .direction(Direction::Horizontal)
                 .constraints(
                     [
                         Constraint::Percentage(20),
@@ -81,11 +96,17 @@ fn main() {
                     ]
                     .as_ref(),
                 )
-                .split(f.size());
+                .split(vertical_chunks[0]);
 
-            render_pane(f, chunks[0], &parents, &mut left_state, PaneType::Left);
-            render_pane(f, chunks[1], &files, &mut middle_state, PaneType::Middle);
-            render_pane(f, chunks[2], &children, &mut right_state, PaneType::Right);
+            render_pane(f, horizontal_chunks[0], &parents, &mut left_state, PaneType::Left);
+            render_pane(f, horizontal_chunks[1], &files, &mut middle_state, PaneType::Middle);
+            render_pane(f, horizontal_chunks[2], &children, &mut right_state, PaneType::Right);
+
+            // Render the small horizontal pane for displaying text
+            let text_to_display = app_state.prompt_message.as_deref().unwrap_or_default();
+            let text_paragraph = Paragraph::new(text_to_display);
+            f.render_widget(text_paragraph, vertical_chunks[1]);
+
         }).unwrap();
 
         // Handle input
