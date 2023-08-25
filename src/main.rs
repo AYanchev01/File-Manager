@@ -24,6 +24,8 @@ pub struct AppState {
     was_cut: bool,
     terminal_height: usize,
     is_delete_prompt: bool,
+    is_renaming: bool,
+    renaming_buffer: Option<String>,
     prompt_message: Option<String>,
 }
 
@@ -38,6 +40,8 @@ impl AppState {
             was_cut: false,
             terminal_height : (terminal_size.1 as usize - 4) * 90 / 100,
             is_delete_prompt: false,
+            is_renaming: false,
+            renaming_buffer: None,
             prompt_message: None,
         }
     }
@@ -103,10 +107,14 @@ fn main() {
             render_pane(f, horizontal_chunks[2], &children, &mut right_state, PaneType::Right);
 
             // Render the small horizontal pane for displaying text
-            let text_to_display = app_state.prompt_message.as_deref().unwrap_or_default();
+            let text_to_display = if let (Some(prompt), Some(buffer)) = (&app_state.prompt_message, &app_state.renaming_buffer) {
+                format!("{}{}", prompt, buffer) // If in renaming mode, display the full prompt
+            } else {
+                app_state.prompt_message.as_deref().unwrap_or_default().to_string()
+            };
+
             let text_paragraph = Paragraph::new(text_to_display);
             f.render_widget(text_paragraph, vertical_chunks[1]);
-
         }).unwrap();
 
         // Handle input

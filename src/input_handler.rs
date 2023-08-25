@@ -20,6 +20,7 @@ const MOVE_UP_HALF_PAGE:     char = 'u';
 const MOVE_DOWN_HALF_PAGE:   char = 'd';
 const YES:                   char = 'y';
 const NO:                    char = 'n';
+const RENAME:                char = 'r';
 
 pub fn handle_input(
     current_dir:             &mut std::path::PathBuf,
@@ -33,8 +34,11 @@ pub fn handle_input(
 ) -> bool {
     if let Ok(event::Event::Key(key_event)) = event::read() {
         app_state.last_modifier = Some(key_event.modifiers);
+
         if app_state.is_delete_prompt {
             return handle_delete_mode(key_event.code, current_dir, middle_state, files, app_state);
+        } else if app_state.is_renaming {
+            return handle_renaming_mode(key_event.code, current_dir, middle_state, files, app_state);
         } else {
             return handle_normal_mode(key_event.code, key_event.modifiers, current_dir, middle_state, left_state, files, scroll_position, max_scroll, selected_file_for_copy, app_state);
         }
@@ -67,6 +71,7 @@ fn handle_normal_mode(
         (KeyCode::Char(CUT), _)                  => cut_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
         (KeyCode::Char(PASTE), _)                => paste_file(current_dir, selected_file_for_copy, app_state),
         (KeyCode::Char(DELETE), _)               => handle_delete(middle_state, files, app_state),
+        (KeyCode::Char(RENAME), _)               => handle_rename(middle_state, files, app_state),
         (KeyCode::Char(GO_TO_TOP), _)            => go_to_top(middle_state, app_state, scroll_position),
         (KeyCode::Char(GO_TO_BOTTOM), _)         => go_to_bottom(middle_state,app_state, files.len(), scroll_position, max_scroll),
         (KeyCode::Char(QUIT), _)                 => return handle_quit(),
@@ -84,7 +89,7 @@ fn handle_delete_mode(
 ) -> bool {
     match key_code {
         KeyCode::Char(YES) => {
-            delete_file(current_dir, middle_state, files);
+            delete_file(current_dir, middle_state, files, app_state);
             app_state.prompt_message = None;
             app_state.is_delete_prompt = false;
         },
@@ -259,14 +264,14 @@ fn paste_file(current_dir: &mut std::path::PathBuf, selected_file_for_copy: &mut
             match fs_utils::move_file(src, &dest) {
                 Ok(_) => {},
                 Err(e) => {
-                    println!("Error while moving: {}", e);
+                    app_state.prompt_message = Some(format!(" Error while moving: {}", e));
                 }
             }
         } else {
             match fs_utils::copy(src, &dest) {
                 Ok(_) => {},
                 Err(e) => {
-                    println!("Error while copying: {}", e);
+                    app_state.prompt_message = Some(format!(" Error while copying: {}", e));
                 }
             }
         }
@@ -287,18 +292,73 @@ fn handle_delete(middle_state: &mut ListState, files: &[FileInfo], app_state: &m
     }
 }
 
-fn delete_file(current_dir: &mut std::path::PathBuf, middle_state: &mut ListState, files: &[FileInfo]) {
+fn delete_file(current_dir: &mut std::path::PathBuf, middle_state: &mut ListState, files: &[FileInfo], app_state: &mut AppState) {
     if let Some(index) = middle_state.selected() {
         if index < files.len() {
             let potential_file = current_dir.join(&files[index].name);
             match fs_utils::delete(&potential_file) {
                 Ok(_) => {},
                 Err(e) => {
-                    // Just print error message for now
-                    println!("Error while deleting: {}", e);
+                    app_state.prompt_message = Some(format!(" Error while deleting: {}", e));
                 }
             }
         }
+    }
+}
+
+fn handle_renaming_mode(
+    key_code: KeyCode,
+    current_dir: &std::path::PathBuf,
+    middle_state: &ListState,
+    files: &[FileInfo],
+    app_state: &mut AppState,
+) -> bool {
+    match key_code {
+        KeyCode::Char(c) if c != '/' => {
+            app_state.renaming_buffer.get_or_insert_with(String::new).push(c);
+        },
+        KeyCode::Backspace => {
+            if let Some(buffer) = &mut app_state.renaming_buffer {
+                buffer.pop();
+            }
+        },
+        KeyCode::Enter => {
+            if let Some(index) = middle_state.selected() {
+                let file_path = current_dir.join(&files[index].name);
+                if let Some(new_name) = &app_state.renaming_buffer {
+                    let new_file_path = current_dir.join(new_name);
+                    
+                    if new_file_path.exists() {
+                        app_state.prompt_message = Some(" Error: File with this name already exists!".to_string());
+                    } else if let Err(e) = std::fs::rename(&file_path, &new_file_path) {
+                        app_state.prompt_message = Some(format!(" Failed to rename {}: {}.", &files[index].name, e));
+                    }
+
+                    app_state.is_renaming = false;
+                    app_state.renaming_buffer = None;
+                }
+            }
+        },
+        KeyCode::Esc => {
+            app_state.is_renaming = false;
+            app_state.prompt_message = None;
+            app_state.renaming_buffer = None;
+        },
+        _ => {}
+    }
+    false
+}
+
+fn handle_rename(
+    middle_state: &ListState,
+    files: &[FileInfo],
+    app_state: &mut AppState,
+) {
+    if let Some(index) = middle_state.selected() {
+        let file_name = &files[index].name;
+        app_state.is_renaming = true;
+        app_state.prompt_message = Some(format!(" Rename \"{}\" to: ", file_name));
+        app_state.renaming_buffer = Some(String::new());
     }
 }
 
