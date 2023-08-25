@@ -30,6 +30,9 @@ pub struct AppState {
     search_pattern: Option<String>,
     search_mode: bool,
     last_search_index: Option<usize>,
+    is_creating_file: bool,
+    is_creating_directory: bool,
+    creation_buffer: Option<String>,
 }
 
 impl AppState {
@@ -49,6 +52,9 @@ impl AppState {
             search_pattern: None,
             search_mode: false,
             last_search_index: None,
+            is_creating_file: false,
+            is_creating_directory: false,
+            creation_buffer: None,
         }
     }
 }
@@ -113,10 +119,11 @@ fn main() {
             render_pane(f, horizontal_chunks[2], &children, &mut right_state, PaneType::Right);
 
             // Render the small horizontal pane for displaying text
-            let text_to_display = if let (Some(prompt), Some(buffer)) = (&app_state.prompt_message, &app_state.renaming_buffer) {
-                format!("{}{}", prompt, buffer) // If in renaming mode, display the full prompt
-            } else {
-                app_state.prompt_message.as_deref().unwrap_or_default().to_string()
+            let text_to_display = match (&app_state.prompt_message, &app_state.renaming_buffer, &app_state.creation_buffer) {
+                (Some(prompt), Some(buffer), None) => format!("{}{}", prompt, buffer),
+                (Some(prompt), None, Some(buffer)) => format!("{}{}", prompt, buffer),
+                (Some(prompt), None, None) => prompt.clone(),
+                _ => String::new(),
             };
 
             let text_paragraph = Paragraph::new(text_to_display);

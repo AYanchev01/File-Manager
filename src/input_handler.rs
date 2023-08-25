@@ -24,6 +24,8 @@ const RENAME:                char = 'r';
 const SEARCH:                char = '/';
 const NEXT:                  char = 'n';
 const PREVIOUS:              char = 'N';
+const CREATE_FILE:           char = 'a';
+const CREATE_DIR:            char = 'A';
 
 pub fn handle_input(
     current_dir:             &mut std::path::PathBuf,
@@ -44,6 +46,8 @@ pub fn handle_input(
             return handle_renaming_mode(key_event.code, current_dir, middle_state, files, app_state);
         } else if app_state.search_mode {
             return handle_search_mode(key_event.code, middle_state,files, app_state);
+        } else if app_state.is_creating_file || app_state.is_creating_directory {
+            return handle_creation_mode(key_event.code, current_dir, app_state);
         } else {
             return handle_normal_mode(key_event.code, key_event.modifiers, current_dir, middle_state, left_state, files, scroll_position, max_scroll, selected_file_for_copy, app_state);
         }
@@ -72,6 +76,8 @@ fn handle_normal_mode(
         (KeyCode::Char(MOVE_DOWN),_)             => move_down(middle_state,files.len(), scroll_position, max_scroll,app_state),
         (KeyCode::Char(MOVE_DOWN_HALF_PAGE), _)  => move_down_half(middle_state, files.len(), scroll_position, max_scroll, app_state),
         (KeyCode::Char(MOVE_UP_HALF_PAGE), _)    => move_up_half(middle_state, files.len(), scroll_position, app_state),
+        (KeyCode::Char(CREATE_FILE), _)          => handle_create_file(app_state),
+        (KeyCode::Char(CREATE_DIR), _)           => handle_create_directory(app_state),
         (KeyCode::Char(COPY), _)                 => copy_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
         (KeyCode::Char(CUT), _)                  => cut_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
         (KeyCode::Char(PASTE), _)                => paste_file(current_dir, selected_file_for_copy, app_state),
@@ -86,6 +92,64 @@ fn handle_normal_mode(
         _                                        => { app_state.last_key_pressed = None; app_state.last_modifier = None; },
     }
     false
+}
+
+fn handle_creation_mode(
+    key_code: KeyCode,
+    current_dir: &std::path::PathBuf,
+    app_state: &mut AppState,
+) -> bool {
+    match key_code {
+        KeyCode::Char(c) if c != '/' => {
+            app_state.creation_buffer.get_or_insert_with(String::new).push(c);
+        },
+        KeyCode::Backspace => {
+            if let Some(buffer) = &mut app_state.creation_buffer {
+                buffer.pop();
+            }
+        },
+        KeyCode::Enter => {
+            if let Some(new_name) = &app_state.creation_buffer {
+                let new_path = current_dir.join(new_name);
+                if new_path.exists() {
+                    app_state.prompt_message = Some(" Error: File/Directory with this name already exists!".to_string());
+                } else {
+                    if app_state.is_creating_file {
+                        if std::fs::File::create(&new_path).is_err() {
+                            app_state.prompt_message = Some(format!(" Failed to create file: {}.", new_name));
+                        }
+                    } else if app_state.is_creating_directory {
+                        if std::fs::create_dir(&new_path).is_err() {
+                            app_state.prompt_message = Some(format!(" Failed to create directory: {}.", new_name));
+                        }
+                    }
+                }
+                app_state.is_creating_file = false;
+                app_state.is_creating_directory = false;
+                app_state.creation_buffer = None;
+            }
+        },
+        KeyCode::Esc => {
+            app_state.is_creating_file = false;
+            app_state.is_creating_directory = false;
+            app_state.prompt_message = None;
+            app_state.creation_buffer = None;
+        },
+        _ => {}
+    }
+    false
+}
+
+fn handle_create_file(app_state: &mut AppState) {
+    app_state.is_creating_file = true;
+    app_state.prompt_message = Some(" Create new file: ".to_string());
+    app_state.creation_buffer = Some(String::new());
+}
+
+fn handle_create_directory(app_state: &mut AppState) {
+    app_state.is_creating_directory = true;
+    app_state.prompt_message = Some(" Create new directory: ".to_string());
+    app_state.creation_buffer = Some(String::new());
 }
 
 fn handle_search_mode(
@@ -111,6 +175,7 @@ fn handle_search_mode(
                 middle_state.select(Some(index));
             }
             app_state.search_mode = false;
+            app_state.search_pattern = None;
         },
         KeyCode::Esc => {
             app_state.search_mode = false;
@@ -138,7 +203,6 @@ fn search_files(pattern: &str, files: &[FileInfo], start_index: usize, reverse: 
                 return Some(index);
             }
         }
-
         // If no match found before the start_index, loop around and search from the end of the list to the start_index.
         (start_index + 1..files.len()).rev().find(|&i| regex_match(i))
     } else {
