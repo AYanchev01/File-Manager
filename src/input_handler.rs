@@ -21,6 +21,9 @@ const MOVE_DOWN_HALF_PAGE:   char = 'd';
 const YES:                   char = 'y';
 const NO:                    char = 'n';
 const RENAME:                char = 'r';
+const SEARCH:                char = '/';
+const NEXT:                  char = 'n';
+const PREVIOUS:              char = 'N';
 
 pub fn handle_input(
     current_dir:             &mut std::path::PathBuf,
@@ -39,6 +42,8 @@ pub fn handle_input(
             return handle_delete_mode(key_event.code, current_dir, middle_state, files, app_state);
         } else if app_state.is_renaming {
             return handle_renaming_mode(key_event.code, current_dir, middle_state, files, app_state);
+        } else if app_state.search_mode {
+            return handle_search_mode(key_event.code, middle_state,files, app_state);
         } else {
             return handle_normal_mode(key_event.code, key_event.modifiers, current_dir, middle_state, left_state, files, scroll_position, max_scroll, selected_file_for_copy, app_state);
         }
@@ -74,10 +79,72 @@ fn handle_normal_mode(
         (KeyCode::Char(RENAME), _)               => handle_rename(middle_state, files, app_state),
         (KeyCode::Char(GO_TO_TOP), _)            => go_to_top(middle_state, app_state, scroll_position),
         (KeyCode::Char(GO_TO_BOTTOM), _)         => go_to_bottom(middle_state,app_state, files.len(), scroll_position, max_scroll),
+        (KeyCode::Char(SEARCH), _)               => handle_search(app_state),
+        (KeyCode::Char(NEXT), _)                 => next_search(middle_state, files, app_state),
+        (KeyCode::Char(PREVIOUS), _)             => previous_search(middle_state, files, app_state),
         (KeyCode::Char(QUIT), _)                 => return handle_quit(),
         _                                        => { app_state.last_key_pressed = None; app_state.last_modifier = None; },
     }
     false
+}
+
+fn handle_search_mode(
+    key_code: KeyCode,
+    middle_state: &mut ListState,
+    files: &[FileInfo],
+    app_state: &mut AppState,
+) -> bool {
+    match key_code {
+        KeyCode::Char(c) => {
+            app_state.search_pattern.get_or_insert_with(String::new).push(c);
+        },
+        KeyCode::Backspace => {
+            if let Some(pattern) = &mut app_state.search_pattern {
+                pattern.pop();
+            }
+        },
+        KeyCode::Enter => {
+            if let Some(pattern) = &app_state.search_pattern {
+                app_state.last_search_index = search_files(pattern, files, 0, false);
+            }
+            if let Some(index) = app_state.last_search_index {
+                middle_state.select(Some(index));
+            }
+            app_state.search_mode = false;
+        },
+        KeyCode::Esc => {
+            app_state.search_mode = false;
+            app_state.search_pattern = None;
+        },
+        _ => {}
+    }
+
+    if let Some(pattern) = &app_state.search_pattern {
+        app_state.prompt_message = Some(format!(" Searching for: {}", pattern));
+    } else {
+        app_state.prompt_message = None;
+    }
+
+    false
+}
+
+fn search_files(pattern: &str, files: &[FileInfo], start_index: usize, reverse: bool) -> Option<usize> {
+    let regex_match = |index: usize| regex::Regex::new(pattern).ok().map_or(false, |re| re.is_match(&files[index].name));
+
+    if reverse {
+        // Start from the file just before the start_index
+        if start_index > 0 {
+            if let Some(index) = (0..start_index).rev().find(|&i| regex_match(i)) {
+                return Some(index);
+            }
+        }
+
+        // If no match found before the start_index, loop around and search from the end of the list to the start_index.
+        (start_index + 1..files.len()).rev().find(|&i| regex_match(i))
+    } else {
+        // Start from start_index to the end, then loop around from the beginning
+        (start_index..files.len()).chain(0..start_index).find(|&i| regex_match(i))
+    }
 }
 
 fn handle_delete_mode(
@@ -359,6 +426,40 @@ fn handle_rename(
         app_state.is_renaming = true;
         app_state.prompt_message = Some(format!(" Rename \"{}\" to: ", file_name));
         app_state.renaming_buffer = Some(String::new());
+    }
+}
+
+fn handle_search(app_state: &mut AppState) {
+    app_state.search_mode = true;
+    app_state.search_pattern = None;
+    app_state.prompt_message = Some(String::from(" Searching for: "));
+}
+
+fn next_search(
+    middle_state: &mut ListState,
+    files: &[FileInfo],
+    app_state: &mut AppState,
+) {
+    if let Some(pattern) = &app_state.search_pattern {
+        let start_index = middle_state.selected().unwrap_or(0) + 1; // Start from next index
+        app_state.last_search_index = search_files(pattern, files, start_index, false);
+        if let Some(index) = app_state.last_search_index {
+            middle_state.select(Some(index));
+        }
+    }
+}
+
+fn previous_search(
+    middle_state: &mut ListState,
+    files: &[FileInfo],
+    app_state: &mut AppState,
+) {
+    if let Some(pattern) = &app_state.search_pattern {
+        let start_index = middle_state.selected().unwrap_or(0); // Start from the current index
+        app_state.last_search_index = search_files(pattern, files, start_index, true);
+        if let Some(index) = app_state.last_search_index {
+            middle_state.select(Some(index));
+        }
     }
 }
 

@@ -27,6 +27,9 @@ pub struct AppState {
     is_renaming: bool,
     renaming_buffer: Option<String>,
     prompt_message: Option<String>,
+    search_pattern: Option<String>,
+    search_mode: bool,
+    last_search_index: Option<usize>,
 }
 
 impl AppState {
@@ -43,6 +46,9 @@ impl AppState {
             is_renaming: false,
             renaming_buffer: None,
             prompt_message: None,
+            search_pattern: None,
+            search_mode: false,
+            last_search_index: None,
         }
     }
 }
