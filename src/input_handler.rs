@@ -135,10 +135,18 @@ fn move_in(current_dir: &mut std::path::PathBuf, middle_state: &mut ListState, f
 }
 
 fn get_editor() -> String {
+    if let Ok(visual) = env::var("VISUAL") {
+        if !visual.is_empty() {
+            return visual;
+        }
+    }
+
     if let Ok(editor) = env::var("EDITOR") {
-        return editor;
-    } 
-    
+        if !editor.is_empty() {
+            return editor;
+        }
+    }
+
     if cfg!(windows) {
         "notepad.exe".to_string()
     } else {
