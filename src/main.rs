@@ -33,6 +33,8 @@ pub struct AppState {
     is_creating_file: bool,
     is_creating_directory: bool,
     creation_buffer: Option<String>,
+    is_changing_permissions: bool,
+    permissions_buffer: Option<String>,
 }
 
 impl AppState {
@@ -55,6 +57,8 @@ impl AppState {
             is_creating_file: false,
             is_creating_directory: false,
             creation_buffer: None,
+            is_changing_permissions: false,
+            permissions_buffer: None,
         }
     }
 }
@@ -119,10 +123,11 @@ fn main() {
             render_pane(f, horizontal_chunks[2], &children, &mut right_state, PaneType::Right);
 
             // Render the small horizontal pane for displaying text
-            let text_to_display = match (&app_state.prompt_message, &app_state.renaming_buffer, &app_state.creation_buffer) {
-                (Some(prompt), Some(buffer), None) => format!("{}{}", prompt, buffer),
-                (Some(prompt), None, Some(buffer)) => format!("{}{}", prompt, buffer),
-                (Some(prompt), None, None) => prompt.clone(),
+            let text_to_display = match (&app_state.prompt_message, &app_state.renaming_buffer, &app_state.creation_buffer, &app_state.permissions_buffer) {
+                (Some(prompt), Some(buffer), None, None) => format!("{}{}", prompt, buffer),
+                (Some(prompt), None, Some(buffer), None) => format!("{}{}", prompt, buffer),
+                (Some(prompt), None, None, Some(buffer)) => format!("{}{}", prompt, buffer),
+                (Some(prompt), None, None, None) => prompt.clone(),
                 _ => String::new(),
             };
 

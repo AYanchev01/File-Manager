@@ -26,6 +26,7 @@ const NEXT:                  char = 'n';
 const PREVIOUS:              char = 'N';
 const CREATE_FILE:           char = 'a';
 const CREATE_DIR:            char = 'A';
+const CHANGE_PERMISSIONS:    char = 'c';
 
 pub fn handle_input(
     current_dir:             &mut std::path::PathBuf,
@@ -48,6 +49,8 @@ pub fn handle_input(
             return handle_search_mode(key_event.code, middle_state,files, app_state);
         } else if app_state.is_creating_file || app_state.is_creating_directory {
             return handle_creation_mode(key_event.code, current_dir, app_state);
+        } else if app_state.is_changing_permissions {
+            return handle_permissions_mode(key_event.code, current_dir, middle_state, files, app_state);
         } else {
             return handle_normal_mode(key_event.code, key_event.modifiers, current_dir, middle_state, left_state, files, scroll_position, max_scroll, selected_file_for_copy, app_state);
         }
@@ -83,6 +86,7 @@ fn handle_normal_mode(
         (KeyCode::Char(PASTE), _)                => paste_file(current_dir, selected_file_for_copy, app_state),
         (KeyCode::Char(DELETE), _)               => handle_delete(middle_state, files, app_state),
         (KeyCode::Char(RENAME), _)               => handle_rename(middle_state, files, app_state),
+        (KeyCode::Char(CHANGE_PERMISSIONS), _)   => handle_change_permissions(middle_state, files, app_state),
         (KeyCode::Char(GO_TO_TOP), _)            => go_to_top(middle_state, app_state, scroll_position),
         (KeyCode::Char(GO_TO_BOTTOM), _)         => go_to_bottom(middle_state,app_state, files.len(), scroll_position, max_scroll),
         (KeyCode::Char(SEARCH), _)               => handle_search(app_state),
@@ -175,7 +179,6 @@ fn handle_search_mode(
                 middle_state.select(Some(index));
             }
             app_state.search_mode = false;
-            app_state.search_pattern = None;
         },
         KeyCode::Esc => {
             app_state.search_mode = false;
@@ -230,6 +233,87 @@ fn handle_delete_mode(
         },
         _ => {}
     }
+    false
+}
+
+#[cfg(target_family = "unix")]
+fn handle_change_permissions(
+    middle_state: &ListState,
+    files: &[FileInfo],
+    app_state: &mut AppState,
+) {
+    if let Some(index) = middle_state.selected() {
+        let file_name = &files[index].name;
+        app_state.is_changing_permissions = true;
+        app_state.prompt_message = Some(format!(" Change permissions of \"{}\": ", file_name));
+        app_state.permissions_buffer = Some(String::new());
+    }
+}
+
+#[cfg(target_family = "unix")]
+fn handle_permissions_mode(
+    key_code: KeyCode,
+    current_dir: &std::path::PathBuf,
+    middle_state: &ListState,
+    files: &[FileInfo],
+    app_state: &mut AppState,
+) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    match key_code {
+        KeyCode::Char(c) if c.is_digit(10) && app_state.permissions_buffer.as_ref().unwrap().len() < 3 => {
+            app_state.permissions_buffer.get_or_insert_with(String::new).push(c);
+        },
+        KeyCode::Backspace => {
+            if let Some(buffer) = &mut app_state.permissions_buffer {
+                buffer.pop();
+            }
+        },
+        KeyCode::Enter => {
+            if let Some(index) = middle_state.selected() {
+                let file_path = current_dir.join(&files[index].name);
+                if let Some(permission_str) = &app_state.permissions_buffer {
+                    if let Ok(mode) = u32::from_str_radix(permission_str, 8) {
+                        let permissions = std::fs::Permissions::from_mode(mode);
+                        if let Err(e) = std::fs::set_permissions(&file_path, permissions) {
+                            app_state.prompt_message = Some(format!(" Failed to set permissions for {}: {}.", &files[index].name, e));
+                        }
+                    } else {
+                        app_state.prompt_message = Some(" Invalid permission value!".to_string());
+                    }
+                    app_state.is_changing_permissions = false;
+                    app_state.permissions_buffer = None;
+                }
+            }
+        },
+        KeyCode::Esc => {
+            app_state.is_changing_permissions = false;
+            app_state.prompt_message = None;
+            app_state.permissions_buffer = None;
+        },
+        _ => {}
+    }
+    false
+}
+
+#[cfg(target_family = "windows")]
+fn handle_change_permissions(
+    _middle_state: &ListState,
+    _files: &[FileInfo],
+    app_state: &mut AppState,
+) {
+    app_state.prompt_message = Some(" Changing permissions is not supported on this platform.".to_string());
+}
+
+#[cfg(target_family = "windows")]
+fn handle_permissions_mode(
+    _key_code: KeyCode,
+    _current_dir: &std::path::PathBuf,
+    _middle_state: &ListState,
+    _files: &[FileInfo],
+    app_state: &mut AppState,
+) -> bool {
+    app_state.prompt_message = Some(" Changing permissions is not supported on this platform.".to_string());
     false
 }
 
