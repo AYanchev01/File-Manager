@@ -1,7 +1,7 @@
 use crossterm::event::KeyModifiers;
 use tui::widgets::ListState;
 use crate::fs_utils::FileInfo;
-use crate::AppState;
+use crate::state::AppState;
 use std::process::{Command, Stdio};
 use std::env;
 

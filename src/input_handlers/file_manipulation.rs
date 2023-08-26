@@ -1,6 +1,7 @@
 use tui::widgets::ListState;
 use crate::fs_utils::{FileInfo, make_unique_path};
-use crate::{fs_utils, AppState};
+use crate::fs_utils;
+use crate::state::AppState;
 
 pub fn handle_create_file(app_state: &mut AppState) {
     app_state.is_creating_file = true;

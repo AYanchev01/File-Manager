@@ -2,6 +2,7 @@ extern crate tui;
 extern crate crossterm;
 
 use crossterm::terminal;
+use crate::state::AppState;
 use tui::backend::CrosstermBackend;
 use tui::layout::{Layout, Constraint, Direction};
 use tui::Terminal;
@@ -13,55 +14,11 @@ mod fs_utils;
 mod input;
 mod preview;
 mod input_handlers;
+mod state;
 
 use ui::{render_pane, PaneType};
 use fs_utils::*;
 use input::*;
-
-pub struct AppState {
-    last_key_pressed: Option<char>,
-    last_modifier: Option<crossterm::event::KeyModifiers>,
-    was_cut: bool,
-    terminal_height: usize,
-    delete_mode: bool,
-    rename_mode: bool,
-    renaming_buffer: Option<String>,
-    prompt_message: Option<String>,
-    search_pattern: Option<String>,
-    search_mode: bool,
-    last_search_index: Option<usize>,
-    is_creating_file: bool,
-    is_creating_directory: bool,
-    creation_buffer: Option<String>,
-    is_changing_permissions: bool,
-    permissions_buffer: Option<String>,
-}
-
-impl AppState {
-    pub fn new() -> Self {
-        // Calculate the half screen size
-        let terminal_size = crossterm::terminal::size().unwrap();
-
-        AppState {
-            last_key_pressed: None,
-            last_modifier: None,
-            was_cut: false,
-            terminal_height : (terminal_size.1 as usize - 4) * 90 / 100,
-            delete_mode: false,
-            rename_mode: false,
-            renaming_buffer: None,
-            prompt_message: None,
-            search_pattern: None,
-            search_mode: false,
-            last_search_index: None,
-            is_creating_file: false,
-            is_creating_directory: false,
-            creation_buffer: None,
-            is_changing_permissions: false,
-            permissions_buffer: None,
-        }
-    }
-}
 
 fn main() {
     // Initialize crossterm
