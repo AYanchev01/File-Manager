@@ -11,7 +11,6 @@ pub fn handle_input(
     files:                   &[FileInfo],
     scroll_position:         &mut usize,
     max_scroll:              &usize,
-    selected_file_for_copy:  &mut Option<std::path::PathBuf>,
     app_state:               &mut AppState,
 ) -> bool {
     if let Ok(event::Event::Key(key_event)) = event::read() {
@@ -28,7 +27,7 @@ pub fn handle_input(
         } else if app_state.is_changing_permissions {
             return modes::handle_permissions_mode(key_event.code, current_dir, middle_state, files, app_state);
         } else {
-            return modes::handle_normal_mode(key_event.code, key_event.modifiers, current_dir, middle_state, left_state, files, scroll_position, max_scroll, selected_file_for_copy, app_state);
+            return modes::handle_normal_mode(key_event.code, key_event.modifiers, current_dir, middle_state, left_state, files, scroll_position, max_scroll, app_state);
         }
     }
     false

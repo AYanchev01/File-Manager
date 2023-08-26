@@ -34,7 +34,6 @@ fn main() {
     let mut current_dir = env::current_dir().unwrap();
     let mut selected_dir = current_dir.clone();
     let mut scroll_position = 0;
-    let mut selected_file_for_copy: Option<std::path::PathBuf> = None;
 
     let mut left_state = ListState::default();
     let mut middle_state = ListState::default();
@@ -93,7 +92,7 @@ fn main() {
         }).unwrap();
 
         // Handle input
-        if handle_input(&mut current_dir, &mut middle_state, &mut left_state, &files, &mut scroll_position, &max_scroll, &mut selected_file_for_copy, &mut app_state) {
+        if handle_input(&mut current_dir, &mut middle_state, &mut left_state, &files, &mut scroll_position, &max_scroll,&mut app_state) {
             break;
         }
     }

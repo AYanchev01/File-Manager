@@ -37,7 +37,6 @@ pub fn handle_normal_mode(
     files: &[FileInfo],
     scroll_position: &mut usize,
     max_scroll: &usize,
-    selected_file_for_copy: &mut Option<std::path::PathBuf>,
     app_state: &mut AppState,
 ) -> bool {
     app_state.prompt_message = None;
@@ -51,9 +50,9 @@ pub fn handle_normal_mode(
         (KeyCode::Char(MOVE_UP_HALF_PAGE), _)    => move_up_half(middle_state, files.len(), scroll_position, app_state),
         (KeyCode::Char(CREATE_FILE), _)          => handle_create_file(app_state),
         (KeyCode::Char(CREATE_DIR), _)           => handle_create_directory(app_state),
-        (KeyCode::Char(COPY), _)                 => copy_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
-        (KeyCode::Char(CUT), _)                  => cut_file(current_dir, middle_state, files, selected_file_for_copy, app_state),
-        (KeyCode::Char(PASTE), _)                => paste_file(current_dir, selected_file_for_copy, app_state),
+        (KeyCode::Char(COPY), _)                 => copy_file(current_dir, middle_state, files, app_state),
+        (KeyCode::Char(CUT), _)                  => cut_file(current_dir, middle_state, files, app_state),
+        (KeyCode::Char(PASTE), _)                => paste_file(current_dir, app_state),
         (KeyCode::Char(DELETE), _)               => handle_delete(middle_state, files, app_state),
         (KeyCode::Char(RENAME), _)               => handle_rename(middle_state, files, app_state),
         (KeyCode::Char(CHANGE_PERMISSIONS), _)   => handle_change_permissions(middle_state, files, app_state),

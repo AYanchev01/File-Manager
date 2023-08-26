@@ -38,32 +38,32 @@ pub fn handle_change_permissions(
     app_state.prompt_message = Some(" Changing permissions is not supported on this platform.".to_string());
 }
 
-pub fn copy_file(current_dir: &mut std::path::PathBuf, middle_state: &mut ListState, files: &[FileInfo], selected_file_for_copy: &mut Option<std::path::PathBuf>, app_state: &mut AppState) {
+pub fn copy_file(current_dir: &mut std::path::PathBuf, middle_state: &mut ListState, files: &[FileInfo], app_state: &mut AppState) {
     if let Some(index) = middle_state.selected() {
         if index < files.len() {
             let potential_file = current_dir.join(&files[index].name);
             if potential_file.exists() {
-                *selected_file_for_copy = Some(potential_file);
+                app_state.selected_file_for_copy = Some(potential_file);
                 app_state.was_cut = false;
             }
         }
     }
 }
 
-pub fn cut_file(current_dir: &mut std::path::PathBuf, middle_state: &mut ListState, files: &[FileInfo], selected_file_for_copy: &mut Option<std::path::PathBuf>, app_state: &mut AppState) {
+pub fn cut_file(current_dir: &mut std::path::PathBuf, middle_state: &mut ListState, files: &[FileInfo], app_state: &mut AppState) {
     if let Some(index) = middle_state.selected() {
         if index < files.len() {
             let potential_file = current_dir.join(&files[index].name);
             if potential_file.exists() {
-                *selected_file_for_copy = Some(potential_file);
+                app_state.selected_file_for_copy = Some(potential_file);
                 app_state.was_cut = true;
             }
         }
     }
 }
 
-pub fn paste_file(current_dir: &mut std::path::PathBuf, selected_file_for_copy: &mut Option<std::path::PathBuf>, app_state: &mut AppState) {
-    if let Some(ref src) = *selected_file_for_copy {
+pub fn paste_file(current_dir: &mut std::path::PathBuf, app_state: &mut AppState) {
+    if let Some(ref src) = app_state.selected_file_for_copy {
         let original_dest = current_dir.join(src.file_name().unwrap_or_default());
         
         // If the file was cut use the original dest, otherwise make it unique for copy
@@ -88,7 +88,7 @@ pub fn paste_file(current_dir: &mut std::path::PathBuf, selected_file_for_copy: 
                 }
             }
         }
-        *selected_file_for_copy = None;
+        app_state.selected_file_for_copy = None;
         app_state.was_cut = false;
     }
 }
