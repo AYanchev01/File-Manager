@@ -10,21 +10,21 @@ use std::env;
 
 mod ui;
 mod fs_utils;
-mod input_handler;
+mod input;
 mod preview;
+mod input_handlers;
 
 use ui::{render_pane, PaneType};
 use fs_utils::*;
-use input_handler::*;
-use preview::*;
+use input::*;
 
 pub struct AppState {
     last_key_pressed: Option<char>,
     last_modifier: Option<crossterm::event::KeyModifiers>,
     was_cut: bool,
     terminal_height: usize,
-    is_delete_prompt: bool,
-    is_renaming: bool,
+    delete_mode: bool,
+    rename_mode: bool,
     renaming_buffer: Option<String>,
     prompt_message: Option<String>,
     search_pattern: Option<String>,
@@ -47,8 +47,8 @@ impl AppState {
             last_modifier: None,
             was_cut: false,
             terminal_height : (terminal_size.1 as usize - 4) * 90 / 100,
-            is_delete_prompt: false,
-            is_renaming: false,
+            delete_mode: false,
+            rename_mode: false,
             renaming_buffer: None,
             prompt_message: None,
             search_pattern: None,
@@ -142,49 +142,4 @@ fn main() {
     }
 
     terminal::disable_raw_mode().unwrap();
-}
-
-fn update_selected_dir(files: &[FileInfo], current_dir: &std::path::PathBuf, selected_dir: &mut std::path::PathBuf, middle_state: &ListState, scroll_position: &mut usize) {
-    if let Some(selected) = middle_state.selected() {
-        if selected < files.len() {
-            let path = current_dir.join(&files[selected].name);
-            if !files[selected].is_dir && selected_dir != &path {
-                *scroll_position = 0;
-                *selected_dir = path;
-            } else if files[selected].is_dir {
-                *selected_dir = path;
-            }
-        }
-    }
-}
-
-fn fetch_children(selected_dir: &std::path::PathBuf, scroll_position: usize, right_pane_height: usize) -> (Vec<FileInfo>, usize) {
-    if selected_dir.as_os_str().is_empty() {
-        return (vec![create_file_info("Select a directory or file".to_string())], 0);
-    } else if selected_dir.is_file() {
-        match get_file_preview(&selected_dir, scroll_position, right_pane_height) {
-            Ok((preview_text, max_scroll_position)) => {
-                (vec![create_file_info(preview_text)], max_scroll_position)
-            },
-            Err(_) => {
-                (vec![create_file_info("Failed to load file preview".to_string())], 0)
-            }
-        }
-    } else {
-        let contents = get_files_and_dirs(&selected_dir);
-        if contents.is_empty() {
-            return (vec![create_file_info("empty".to_string())], 0);
-        } else {
-            return (contents, 0);
-        }
-    }
-}
-
-fn create_file_info(name: String) -> FileInfo {
-    FileInfo {
-        name,
-        perms: None,
-        is_dir: false,
-        is_exec: false,
-    }
 }
